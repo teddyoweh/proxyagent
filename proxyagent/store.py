@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS proxy_agent_tokens (
 CREATE TABLE IF NOT EXISTS proxy_agent_keys (
     id TEXT PRIMARY KEY, provider TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'api_key',
     secret TEXT NOT NULL, refresh TEXT, expires_ms BIGINT, label TEXT,
-    created_ms BIGINT, meta_json TEXT, active INTEGER NOT NULL DEFAULT 1
+    created_ms BIGINT, meta_json TEXT, active INTEGER NOT NULL DEFAULT 1, masked TEXT
 );
 CREATE TABLE IF NOT EXISTS proxy_agent_calls (
     id TEXT PRIMARY KEY, ts_ms BIGINT, token_id TEXT, token_label TEXT,
@@ -48,10 +48,12 @@ class Store:
         self.db.executescript(_SCHEMA)
         self.backend = "postgres" if self.db.pg else "sqlite"
         # migrate older DBs created before budget_usd existed
-        try:
-            self.db.execute("ALTER TABLE proxy_agent_tokens ADD COLUMN budget_usd DOUBLE PRECISION")
-        except Exception:
-            pass
+        for stmt in ("ALTER TABLE proxy_agent_tokens ADD COLUMN budget_usd DOUBLE PRECISION",
+                     "ALTER TABLE proxy_agent_keys ADD COLUMN masked TEXT"):
+            try:
+                self.db.execute(stmt)
+            except Exception:
+                pass
 
     # -- machine tokens ---------------------------------------------------- #
 
@@ -98,40 +100,55 @@ class Store:
     # -- provider credentials (proxy_agent_keys) --------------------------- #
 
     def add_credential(self, provider, secret, *, kind="api_key", refresh=None,
-                       expires_ms=None, label=None, meta=None, replace=True):
+                       expires_ms=None, label=None, meta=None, replace=False):
+        """Add a credential to a provider's POOL. A provider can hold many credentials
+        across auth types (several api_keys, oauth tokens, bedrock, vertex…). replace=True
+        swaps out other creds of the SAME kind; default keeps them (for failover/rotation)."""
         cid = "key_" + uuid.uuid4().hex[:12]
-        # replace=True (default, the UI "connect"): swap the key. replace=False adds an
-        # ADDITIONAL active key to the provider's pool for failover/rotation.
         if replace:
-            self.db.execute("UPDATE proxy_agent_keys SET active=0 WHERE provider=?", (provider,))
+            self.db.execute("UPDATE proxy_agent_keys SET active=0 WHERE provider=? AND kind=?",
+                            (provider, kind))
         self.db.execute(
             """INSERT INTO proxy_agent_keys
-               (id, provider, kind, secret, refresh, expires_ms, label, created_ms, meta_json, active)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)""",
+               (id, provider, kind, secret, refresh, expires_ms, label, created_ms, meta_json, active, masked)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
             (cid, provider, kind, crypto.encrypt(secret),
              crypto.encrypt(refresh) if refresh else None, expires_ms, label, now_ms(),
-             json.dumps(meta or {})),
+             json.dumps(meta or {}), mask(secret)),
         )
         return cid
 
-    def get_credential(self, provider):
-        """Active credential for a provider, decrypted. None → fall back to env."""
-        r = self.db.fetchone(
-            "SELECT * FROM proxy_agent_keys WHERE provider=? AND active=1 ORDER BY created_ms DESC",
-            (provider,))
-        if not r:
-            return None
+    def _decrypt_row(self, r):
         r = dict(r)
         r["secret"] = crypto.decrypt(r["secret"])
         if r.get("refresh"):
             r["refresh"] = crypto.decrypt(r["refresh"])
+        if r.get("meta_json"):
+            try:
+                r["meta"] = json.loads(r["meta_json"])
+            except Exception:
+                r["meta"] = {}
         return r
+
+    def get_credential(self, provider, kind=None):
+        """Most-recent active credential (optionally of a kind), decrypted."""
+        creds = self.get_credentials(provider, kind=kind)
+        return creds[-1] if creds else None
+
+    def get_credentials(self, provider, kind=None):
+        """The provider's whole active pool, decrypted, oldest→newest (rotation order)."""
+        q = "SELECT * FROM proxy_agent_keys WHERE provider=? AND active=1"
+        args = [provider]
+        if kind:
+            q += " AND kind=?"
+            args.append(kind)
+        return [self._decrypt_row(r) for r in self.db.fetchall(q + " ORDER BY created_ms", tuple(args))]
 
     def list_credentials(self):
         rows = self.db.fetchall("SELECT * FROM proxy_agent_keys ORDER BY created_ms DESC")
         # never return the secret material
         return [{"id": r["id"], "provider": r["provider"], "kind": r["kind"],
-                 "label": r["label"], "active": bool(r["active"]),
+                 "label": r["label"], "active": bool(r["active"]), "masked": r.get("masked"),
                  "created_ms": r["created_ms"]} for r in rows]
 
     def remove_credential(self, cid):

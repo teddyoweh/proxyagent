@@ -151,6 +151,18 @@ Bedrock / Vertex / OAuth-refresh (the cloud-credential paths enterprises actuall
 being built out — the proxy holds the AWS/GCP creds and signs upstream, so the machine needs
 none. The model providers below are the *backends* for model-agnostic harnesses (aider, Cline…).
 
+## Credential pools & failover
+A provider isn't one key — it's a **pool**. Add as many credentials as you want, across
+auth types (several API keys, OAuth tokens, …); each is managed individually in the
+dashboard. The proxy rotates through the pool, **failing over** to the next credential on
+any `429` / `5xx` — so a rate-limited or dead key never takes you down.
+
+```bash
+proxyagent provider add anthropic --key sk-ant-aaa        # additive — builds the pool
+proxyagent provider add anthropic --key sk-ant-bbb
+proxyagent provider add anthropic --key <oauth> --kind oauth
+```
+
 ## Per-token budgets
 Cap what any token can spend; once its summed cost crosses the cap, the proxy returns **402**.
 ```bash

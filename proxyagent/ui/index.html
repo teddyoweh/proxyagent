@@ -192,20 +192,19 @@ async function connectHarness(name,provider){const key=document.getElementById("
 async function refreshProviders(){
   const d=await(await api("/admin/catalog")).json();const g=document.getElementById("provgrid");
   let connected=0;
-  g.innerHTML=d.providers.map(p=>{const on=p.via_env||p.via_store;if(on)connected++;
-    const how=p.via_store?`stored ${p.cred_kind}`:(p.via_env?"env":"");
+  g.innerHTML=d.providers.map(p=>{const creds=p.creds||[];const on=p.via_env||creds.length;if(on)connected++;
+    const credrows=creds.map(c=>`<div class="row" style="justify-content:space-between;gap:6px"><span class="badge on">${c.kind} · ${c.masked||""}</span><button class="danger sm" onclick="disconnect('${c.id}')">remove</button></div>`).join("");
     return `<div class="prov"><div class="top">${logo(p.name,p.color)}<div style="flex:1"><h3>${p.label}</h3><div class="ep">${p.shape} · ${p.name}</div></div>
       ${on?'<span class="pill ok">on</span>':'<span class="pill no">off</span>'}</div>
-      <div class="badges">${p.kinds.map(k=>`<span class="badge">${k}</span>`).join("")}${on?`<span class="badge on">${how}</span>`:""}</div>
-      <div class="models">${(p.models||[]).slice(0,2).join(" · ")}</div>
-      <div class="row">${p.via_store?`<button class="danger sm" onclick="disconnect('${p.cred_id}')">Disconnect</button>`:`<button class="sm" onclick="openConnect('${p.name}')">${p.via_env?"Override key":"Connect"}</button>`}</div>
+      <div class="badges">${p.kinds.map(k=>`<span class="badge">${k}</span>`).join("")}${p.via_env?'<span class="badge on">env</span>':''}</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin:6px 0 11px">${credrows||'<span class="muted" style="font-size:11.5px">No keys yet</span>'}</div>
+      <div class="row"><button class="sm" onclick="openConnect('${p.name}')">+ Add credential</button></div>
       <div class="connect" id="c_${p.name}">
-        <input id="k_${p.name}" type="password" placeholder="${p.name} API key${p.kinds.includes('oauth')?' / OAuth token':''}"/>
-        <div class="row">${p.kinds.length>1?`<select id="kind_${p.name}">${p.kinds.map(k=>`<option value="${k}">${k}</option>`).join("")}</select>`:`<input id="kind_${p.name}" type="hidden" value="api_key"/>`}
-          <button class="sm" onclick="connect('${p.name}')">Save</button><button class="ghost sm" onclick="openConnect('${p.name}')">Cancel</button></div>
+        ${p.kinds.length>1?`<select id="kind_${p.name}">${p.kinds.map(k=>`<option value="${k}">${k}</option>`).join("")}</select>`:`<input id="kind_${p.name}" type="hidden" value="api_key"/>`}
+        <input id="k_${p.name}" type="password" placeholder="${p.name} key / token"/>
+        <div class="row"><button class="sm" onclick="connect('${p.name}')">Add</button><button class="ghost sm" onclick="openConnect('${p.name}')">Cancel</button></div>
       </div></div>`}).join("");
   document.getElementById("s_prov").textContent=connected;
-  document.getElementById("enc2")&&0;
 }
 function openConnect(n){document.getElementById("c_"+n).classList.toggle("open")}
 async function connect(n){const key=document.getElementById("k_"+n).value.trim();if(!key)return;

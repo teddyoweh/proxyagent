@@ -188,3 +188,17 @@ def test_harness_catalog():
     cc = next(x for x in h if x["name"] == "claude-code")
     assert {a["mode"] for a in cc["auth"]} == {"api_key", "oauth", "bedrock", "vertex"}
     assert any(a["mode"] == "api_key" and a["ready"] for a in cc["auth"])
+
+
+def test_credential_pool_and_failover_order():
+    from proxyagent.providers import resolve_candidates
+    s = Store(":memory:")
+    s.add_credential("openai", "sk-1", kind="api_key")     # additive by default →
+    s.add_credential("openai", "sk-2", kind="api_key")     # a pool of two keys
+    creds = s.get_credentials("openai", kind="api_key")
+    assert [c["secret"] for c in creds] == ["sk-1", "sk-2"]   # oldest→newest rotation order
+    cands = resolve_candidates(PROVIDERS["openai"], s)
+    assert cands[0]["Authorization"] == "Bearer sk-1"
+    assert cands[1]["Authorization"] == "Bearer sk-2"        # failover tries #2 next
+    listed = s.list_credentials()
+    assert len(listed) == 2 and all("secret" not in c and c["masked"] for c in listed)

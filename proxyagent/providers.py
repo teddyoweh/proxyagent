@@ -16,19 +16,35 @@ from . import pricing
 from .config import Config, PROVIDERS
 from .store import Store, now_ms
 
+FAILOVER_STATUS = {429, 500, 502, 503, 504, 529}
+
+
+def _headers_for(provider, secret: str, kind: str) -> dict:
+    if kind != "api_key":  # oauth / bearer
+        return {"Authorization": f"Bearer {secret}", **provider.extra_headers}
+    if provider.auth_style == "x-api-key":
+        return {"x-api-key": secret, **provider.extra_headers}
+    return {"Authorization": f"Bearer {secret}", **provider.extra_headers}
+
+
+def resolve_candidates(provider, store: Store | None) -> list[dict]:
+    """Every usable auth header-set for a provider, in rotation order: the stored pool
+    (api_key then oauth creds), then the env key as a last resort. The forwarder tries
+    them in turn, rotating past any that 429/5xx — that's the failover."""
+    out: list[dict] = []
+    if store:
+        for c in store.get_credentials(provider.name, kind="api_key"):
+            out.append(_headers_for(provider, c["secret"], "api_key"))
+        for c in store.get_credentials(provider.name, kind="oauth"):
+            out.append(_headers_for(provider, c["secret"], "oauth"))
+    if provider.key:
+        out.append(provider.auth_headers())
+    return out
+
+
 def resolve_auth(provider, store: Store | None) -> tuple[dict, bool]:
-    """Auth headers for an upstream call. A stored credential (proxy_agent_keys) wins
-    over the env key; returns ({}, False) when nothing is configured."""
-    cred = store.get_credential(provider.name) if store else None
-    if cred:
-        secret, kind = cred["secret"], cred["kind"]
-        if kind == "oauth":
-            return {"Authorization": f"Bearer {secret}", **provider.extra_headers}, True
-        if provider.auth_style == "x-api-key":
-            return {"x-api-key": secret, **provider.extra_headers}, True
-        return {"Authorization": f"Bearer {secret}", **provider.extra_headers}, True
-    headers = provider.auth_headers()
-    return headers, bool(headers)
+    cands = resolve_candidates(provider, store)
+    return (cands[0], True) if cands else ({}, False)
 
 
 def scope_allows(scope: list[str], provider: str, model: str) -> bool:
@@ -70,15 +86,14 @@ async def forward(
             return 200, {"content-type": "text/event-stream"}, _mock_stream(provider.shape, payload), None
         return 200, {"content-type": "application/json"}, payload, None
 
-    auth, ok = resolve_auth(provider, store)
-    if not ok:
+    candidates = resolve_candidates(provider, store)
+    if not candidates:
         return 502, {}, {"error": f"provider '{provider_name}' not configured on the proxy "
                                   f"(set {provider.key_env} or `proxyagent provider add {provider_name}`)"}, None
 
     url = provider.endpoint
-    headers = {"content-type": "application/json", **auth}
 
-    def _log(status, ptok, ctok, err=None):
+    def _log(status, ptok, ctok, err=None, attempt=0):
         store.log_request(
             token_id=token["id"], token_label=token.get("label"), provider=provider_name,
             model=model, status=status, prompt_tokens=ptok, completion_tokens=ctok,
@@ -93,36 +108,49 @@ async def forward(
             status = 200
             try:
                 async with httpx.AsyncClient(timeout=config.request_timeout) as client:
-                    async with client.stream("POST", url, headers=headers, json=body) as resp:
-                        status = resp.status_code
-                        async for chunk in resp.aiter_raw():
-                            # Best-effort usage capture from the final SSE event.
-                            text = chunk.decode("utf-8", "ignore")
-                            if '"output_tokens"' in text or '"completion_tokens"' in text:
-                                try:
-                                    for line in text.splitlines():
-                                        if line.startswith("data:"):
-                                            d = json.loads(line[5:].strip())
-                                            usage = d.get("usage") or (d.get("message") or {}).get("usage") or {}
-                                            ptok = usage.get("input_tokens") or usage.get("prompt_tokens") or ptok
-                                            ctok = usage.get("output_tokens") or usage.get("completion_tokens") or ctok
-                                except Exception:
-                                    pass
-                            yield chunk
+                    for i, auth in enumerate(candidates):
+                        async with client.stream(
+                            "POST", url, headers={"content-type": "application/json", **auth}, json=body
+                        ) as resp:
+                            status = resp.status_code
+                            if status in FAILOVER_STATUS and i < len(candidates) - 1:
+                                await resp.aread()  # drain + rotate to the next credential
+                                continue
+                            async for chunk in resp.aiter_raw():
+                                text = chunk.decode("utf-8", "ignore")
+                                if '"output_tokens"' in text or '"completion_tokens"' in text:
+                                    try:
+                                        for line in text.splitlines():
+                                            if line.startswith("data:"):
+                                                d = json.loads(line[5:].strip())
+                                                usage = d.get("usage") or (d.get("message") or {}).get("usage") or {}
+                                                ptok = usage.get("input_tokens") or usage.get("prompt_tokens") or ptok
+                                                ctok = usage.get("output_tokens") or usage.get("completion_tokens") or ctok
+                                    except Exception:
+                                        pass
+                                yield chunk
+                            break
             finally:
                 _log(status, ptok, ctok)
         return 200, {"content-type": "text/event-stream"}, _gen(), None
 
-    # Non-streaming.
+    # Non-streaming, with credential failover.
+    last_status, last_payload = 502, {"error": "all credentials failed"}
     async with httpx.AsyncClient(timeout=config.request_timeout) as client:
-        resp = await client.post(url, headers=headers, json=body)
-    try:
-        payload = resp.json()
-    except Exception:
-        payload = {"error": resp.text}
-    ptok, ctok = _extract_usage(provider.shape, payload if isinstance(payload, dict) else {})
-    _log(resp.status_code, ptok, ctok, None if resp.is_success else str(payload)[:300])
-    return resp.status_code, {"content-type": "application/json"}, payload, None
+        for i, auth in enumerate(candidates):
+            resp = await client.post(url, headers={"content-type": "application/json", **auth}, json=body)
+            if resp.status_code in FAILOVER_STATUS and i < len(candidates) - 1:
+                last_status = resp.status_code
+                continue
+            try:
+                payload = resp.json()
+            except Exception:
+                payload = {"error": resp.text}
+            ptok, ctok = _extract_usage(provider.shape, payload if isinstance(payload, dict) else {})
+            _log(resp.status_code, ptok, ctok, None if resp.is_success else str(payload)[:300])
+            return resp.status_code, {"content-type": "application/json"}, payload, None
+    _log(last_status, None, None, "all credentials failed")
+    return last_status, {"content-type": "application/json"}, last_payload, None
 
 
 # ------------------------------------------------------------------ #
