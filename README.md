@@ -32,7 +32,7 @@ machine never sees a real credential.
 ## Try it with zero keys (local)
 ```bash
 pip install proxyagent && proxyagent serve        # prints an admin token
-proxyagent token new local --admin pa_admin_…     # mint a token
+proxyagent token new local        # works locally, no admin token needed     # mint a token
 # call the built-in `mock` model — full pipeline (auth, scope, usage, cost, log), no real key:
 curl -s localhost:8080/anthropic/v1/messages -H "x-api-key: pa_…" \
   -d '{"model":"mock","max_tokens":50,"messages":[{"role":"user","content":"hi"}]}'
@@ -49,7 +49,7 @@ proxyagent serve                        # prints an admin token + a dashboard at
 
 **2. Mint a machine token** (scoped + revocable):
 ```bash
-proxyagent token new macbook-01 --scope "anthropic:claude-*" --admin pa_admin_…
+proxyagent token new macbook-01 --scope "anthropic:claude-*"   # local: no admin token needed
 ```
 
 **3. Run any agent on any machine — no real key there:**

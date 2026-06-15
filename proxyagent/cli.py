@@ -16,6 +16,9 @@ console = Console()
 err = Console(stderr=True)
 
 
+DEFAULT_PROXY = "http://127.0.0.1:8080"
+
+
 def _admin_client(proxy: str, admin: Optional[str]) -> httpx.Client:
     admin = admin or os.environ.get("PROXYAGENT_ADMIN_TOKEN")
     if not admin:
@@ -23,6 +26,22 @@ def _admin_client(proxy: str, admin: Optional[str]) -> httpx.Client:
                   "It's printed when you run [bold]proxyagent serve[/bold].")
         raise typer.Exit(1)
     return httpx.Client(base_url=proxy.rstrip("/"), headers={"x-admin-token": admin}, timeout=30)
+
+
+def _is_remote(proxy: str, admin: Optional[str]) -> bool:
+    """Manage a REMOTE proxy (via admin API) only if an admin token is given or the
+    proxy isn't localhost. Otherwise operate on the LOCAL store directly — no admin
+    token needed, you already have filesystem access."""
+    from urllib.parse import urlparse
+    if admin or os.environ.get("PROXYAGENT_ADMIN_TOKEN"):
+        return True
+    return urlparse(proxy).hostname not in (None, "127.0.0.1", "localhost", "0.0.0.0")
+
+
+def _local_store():
+    from .config import Config
+    from .store import Store
+    return Store(Config.load().db_path)
 
 
 @app.command()
@@ -36,13 +55,25 @@ def serve(host: str = "127.0.0.1", port: int = 8080):
     config = Config.load()
     if config.admin_token_plain:
         console.print(Panel.fit(
-            f"[green]✓ proxyagent[/green]\n\n[bold]Admin token[/bold] (shown once)\n"
+            f"[green]✓ proxyagent[/green]\n\n[bold]Admin token[/bold] (for the dashboard)\n"
             f"  [yellow]{config.admin_token_plain}[/yellow]\n\n"
-            f"[dim]Save it — you need it for the dashboard + `proxyagent token`.[/dim]",
+            f"[dim]Reveal anytime: [bold]proxyagent admin-token[/bold][/dim]",
             border_style="green"))
     console.print(f"[dim]Dashboard:[/dim] http://{host}:{port}   "
-                  f"[dim]providers:[/dim] {', '.join(config.configured_providers()) or 'none — set ANTHROPIC_API_KEY / OPENAI_API_KEY'}")
+                  f"[dim]providers:[/dim] {', '.join(config.configured_providers()) or 'none — `proxyagent provider add anthropic --key …`'}")
+    console.print("[dim]Mint a machine token in another terminal:[/dim] [bold]proxyagent token new[/bold] [dim](works locally, no admin token needed)[/dim]")
     uvicorn.run(create_app(config), host=host, port=port, log_level="warning")
+
+
+@app.command("admin-token")
+def admin_token():
+    """Print this machine's admin token (for the dashboard)."""
+    from .config import Config
+    cfg = Config.load()
+    if cfg.admin_token_plain:
+        console.print(cfg.admin_token_plain)
+    else:
+        err.print("[yellow]Admin token is set via PROXYAGENT_ADMIN_TOKEN (not stored here).[/yellow]")
 
 
 @app.command("run")
@@ -122,13 +153,21 @@ def provider_add(
     admin: str = typer.Option(None, "--admin"),
 ):
     """Store a provider credential (encrypted if PROXYAGENT_SECRET_KEY is set)."""
-    with _admin_client(proxy, admin) as c:
-        r = c.post("/admin/providers", json={"provider": provider, "secret": key,
-                                             "kind": kind, "label": label})
-    if r.status_code >= 400:
-        err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
-    d = r.json()
-    note = "[green]encrypted[/green]" if d["stored"] == "encrypted" else "[yellow]plaintext — set PROXYAGENT_SECRET_KEY[/yellow]"
+    from .config import PROVIDERS
+    if provider not in PROVIDERS:
+        err.print(f"[red]✗[/red] unknown provider; known: {', '.join(PROVIDERS)}"); raise typer.Exit(1)
+    if not _is_remote(proxy, admin):
+        from . import crypto
+        _local_store().add_credential(provider, key, kind=kind, label=label)
+        stored = "encrypted" if crypto.encryption_available() else "plaintext"
+    else:
+        with _admin_client(proxy, admin) as c:
+            r = c.post("/admin/providers", json={"provider": provider, "secret": key,
+                                                 "kind": kind, "label": label})
+        if r.status_code >= 400:
+            err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
+        stored = r.json()["stored"]
+    note = "[green]encrypted[/green]" if stored == "encrypted" else "[yellow]plaintext — set PROXYAGENT_SECRET_KEY[/yellow]"
     console.print(f"[green]✓[/green] stored [cyan]{provider}[/cyan] ({kind}) · {note}")
 
 
@@ -136,11 +175,19 @@ def provider_add(
 def provider_ls(proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
                 admin: str = typer.Option(None, "--admin")):
     """List stored provider credentials (secrets never shown)."""
-    with _admin_client(proxy, admin) as c:
-        r = c.get("/admin/providers")
-    if r.status_code >= 400:
-        err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
-    d = r.json()
+    if not _is_remote(proxy, admin):
+        from . import crypto
+        from .config import PROVIDERS
+        creds = _local_store().list_credentials()
+        configured = sorted({n for n, p in PROVIDERS.items() if p.key}
+                            | {c["provider"] for c in creds if c["active"]})
+        d = {"credentials": creds, "configured": configured, "encryption": crypto.encryption_available()}
+    else:
+        with _admin_client(proxy, admin) as c:
+            r = c.get("/admin/providers")
+        if r.status_code >= 400:
+            err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
+        d = r.json()
     t = Table(title=f"Provider credentials  ·  encryption {'on' if d['encryption'] else 'OFF'}")
     for col in ("ID", "Provider", "Kind", "Label", "Active"):
         t.add_column(col)
@@ -155,10 +202,14 @@ def provider_ls(proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
 def provider_rm(cred_id: str, proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
                 admin: str = typer.Option(None, "--admin")):
     """Remove a stored credential."""
-    with _admin_client(proxy, admin) as c:
-        r = c.delete(f"/admin/providers/{cred_id}")
-    if r.status_code >= 400:
-        err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
+    if not _is_remote(proxy, admin):
+        if not _local_store().remove_credential(cred_id):
+            err.print(f"[red]✗[/red] no such credential"); raise typer.Exit(1)
+    else:
+        with _admin_client(proxy, admin) as c:
+            r = c.delete(f"/admin/providers/{cred_id}")
+        if r.status_code >= 400:
+            err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
     console.print(f"[green]✓[/green] removed {cred_id}")
 
 
@@ -172,14 +223,17 @@ def token_new(
     admin: Optional[str] = typer.Option(None, "--admin"),
 ):
     """Mint a machine token — give it to a remote machine; it holds no real key."""
-    with _admin_client(proxy, admin) as c:
-        r = c.post("/admin/tokens", json={"label": label, "scope": list(scope),
-                                          "ttl_seconds": ttl, "rate_limit": rate})
-    if r.status_code >= 400:
-        err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
-    d = r.json()
+    if not _is_remote(proxy, admin):
+        plain, _ = _local_store().create_token(label, list(scope), ttl_seconds=ttl, rate_limit=rate)
+    else:
+        with _admin_client(proxy, admin) as c:
+            r = c.post("/admin/tokens", json={"label": label, "scope": list(scope),
+                                              "ttl_seconds": ttl, "rate_limit": rate})
+        if r.status_code >= 400:
+            err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
+        plain = r.json()["token"]
     console.print(Panel.fit(
-        f"[green]✓ machine token[/green] [dim]({label})[/dim]\n\n  [yellow]{d['token']}[/yellow]\n\n"
+        f"[green]✓ machine token[/green] [dim]({label})[/dim]\n\n  [yellow]{plain}[/yellow]\n\n"
         f"[dim]scope: {', '.join(scope)} · shown once[/dim]", border_style="green"))
 
 
@@ -187,11 +241,17 @@ def token_new(
 def token_ls(proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
              admin: Optional[str] = typer.Option(None, "--admin")):
     """List machine tokens."""
-    with _admin_client(proxy, admin) as c:
-        r = c.get("/admin/tokens")
-    if r.status_code >= 400:
-        err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
-    rows = r.json()["tokens"]
+    if not _is_remote(proxy, admin):
+        import json as _json
+        rows = [{"id": t["id"], "label": t["label"], "masked": t["masked"],
+                 "scope": _json.loads(t["scope_json"]), "revoked": t["revoked"]}
+                for t in _local_store().list_tokens()]
+    else:
+        with _admin_client(proxy, admin) as c:
+            r = c.get("/admin/tokens")
+        if r.status_code >= 400:
+            err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
+        rows = r.json()["tokens"]
     if not rows:
         console.print("[dim]No tokens.[/dim]"); return
     t = Table(title="Machine tokens")
@@ -207,10 +267,14 @@ def token_ls(proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
 def token_revoke(token_id: str, proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
                  admin: Optional[str] = typer.Option(None, "--admin")):
     """Revoke a token by id."""
-    with _admin_client(proxy, admin) as c:
-        r = c.delete(f"/admin/tokens/{token_id}")
-    if r.status_code >= 400:
-        err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
+    if not _is_remote(proxy, admin):
+        if not _local_store().revoke_token(token_id):
+            err.print(f"[red]✗[/red] no such token"); raise typer.Exit(1)
+    else:
+        with _admin_client(proxy, admin) as c:
+            r = c.delete(f"/admin/tokens/{token_id}")
+        if r.status_code >= 400:
+            err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
     console.print(f"[green]✓[/green] revoked {token_id}")
 
 

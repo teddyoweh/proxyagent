@@ -74,16 +74,21 @@ class Config:
         # Admin token: from env, or a persisted one, or freshly generated (shown once).
         env_admin = os.environ.get("PROXYAGENT_ADMIN_TOKEN")
         admin_file = HOME / "admin_token"
+        existing = admin_file.read_text().strip() if admin_file.exists() else ""
         if env_admin:
+            # Production: trust the env token, persist nothing.
             cfg.admin_token_hash = hash_token(env_admin)
-        elif admin_file.exists():
-            cfg.admin_token_hash = admin_file.read_text().strip()
+        elif existing.startswith(ADMIN_PREFIX):
+            # Local: the plaintext is stored (0600) so the dashboard stays reachable.
+            cfg.admin_token_plain = existing
+            cfg.admin_token_hash = hash_token(existing)
         else:
+            # Fresh (or migrating an old hash-only file we can't recover): regenerate.
             plain = new_token(ADMIN_PREFIX)
-            cfg.admin_token_hash = hash_token(plain)
-            admin_file.write_text(cfg.admin_token_hash)
+            admin_file.write_text(plain)
             admin_file.chmod(0o600)
             cfg.admin_token_plain = plain
+            cfg.admin_token_hash = hash_token(plain)
         return cfg
 
     def configured_providers(self) -> list[str]:
