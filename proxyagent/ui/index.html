@@ -12,42 +12,33 @@
   header{position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:16px 28px;background:rgba(8,9,11,.72);backdrop-filter:blur(14px)}
   .brand{display:flex;align-items:center;gap:10px;font-weight:650;font-size:16px}
   .logo{width:27px;height:27px;border-radius:8px;background:linear-gradient(135deg,#34d39e,#3b82f6);display:grid;place-items:center;color:#04130d;font-weight:800}
-  main{max-width:1140px;margin:0 auto;padding:8px 28px 60px}
+  main{max-width:1040px;margin:0 auto;padding:8px 28px 60px}
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:26px}
   .card{background:var(--panel);border-radius:18px;padding:20px}
   .stat .n{font-size:31px;font-weight:700;letter-spacing:-.02em}.stat .l{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.09em;margin-top:6px}
   .tabs{display:flex;gap:6px;margin-bottom:20px}
   .tab{padding:8px 15px;color:var(--dim);cursor:pointer;font-weight:560;border-radius:10px}
-  .tab:hover{color:var(--txt);background:var(--panel)}
-  .tab.on{color:var(--txt);background:var(--panel)}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(258px,1fr));gap:16px}
-  .prov{background:var(--panel);border-radius:18px;padding:18px;transition:background .15s,transform .15s}
-  .prov:hover{background:#1a1d23}
-  .prov .top{display:flex;align-items:center;gap:13px}
-  .tile{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex:none;font-weight:800;font-size:18px;overflow:hidden}
-  .tile img{width:23px;height:23px;display:block}.tile .fbm{display:none}.tile.fb img{display:none}.tile.fb .fbm{display:flex;align-items:center;justify-content:center}
-  .prov h3{margin:0;font-size:15px;font-weight:640}.prov .ep{color:var(--dim);font-size:11.5px;margin-top:1px}
-  .badges{display:flex;gap:6px;flex-wrap:wrap;margin:13px 0}
+  .tab:hover,.tab.on{color:var(--txt);background:var(--panel)}
+  .tile{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;flex:none;font-weight:800;font-size:16px;overflow:hidden}
+  .tile img{width:21px;height:21px;display:block}.tile .fbm{display:none}.tile.fb img{display:none}.tile.fb .fbm{display:flex;align-items:center;justify-content:center}
   .badge{font-size:10.5px;padding:3px 9px;border-radius:8px;background:var(--soft);color:var(--dim);text-transform:uppercase;letter-spacing:.04em}
   .badge.on{background:rgba(52,211,158,.14);color:var(--grn)}
-  .models{color:var(--dim);font-size:11.5px;margin:8px 0 13px;min-height:16px}
-  input,select{font:inherit;border-radius:11px;border:none;background:var(--panel2);color:var(--txt);padding:9px 12px;outline:none;box-shadow:inset 0 0 0 1px transparent}
-  input:focus,select:focus{box-shadow:inset 0 0 0 1px rgba(52,211,158,.45)}
-  input::placeholder{color:#5a606b}
-  button{font:inherit;background:var(--grn);color:#04130d;border:none;border-radius:11px;padding:9px 14px;font-weight:660;cursor:pointer}button:hover{filter:brightness(1.07)}
+  input,select{font:inherit;border-radius:11px;border:none;background:var(--panel2);color:var(--txt);padding:10px 12px;outline:none;box-shadow:inset 0 0 0 1px transparent}
+  input:focus,select:focus{box-shadow:inset 0 0 0 1px rgba(52,211,158,.45)}input::placeholder{color:#5a606b}
+  button{font:inherit;background:var(--grn);color:#04130d;border:none;border-radius:11px;padding:10px 15px;font-weight:660;cursor:pointer}button:hover{filter:brightness(1.07)}
   button.ghost{background:var(--soft);color:var(--dim)}button.ghost:hover{color:var(--txt)}
   button.danger{background:rgba(246,120,138,.12);color:var(--red)}button.danger:hover{background:rgba(246,120,138,.2)}
   button.sm{padding:7px 12px;font-size:12.5px;border-radius:9px}
   .row{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
-  .connect{margin-top:4px;display:none;gap:9px;flex-direction:column}.connect.open{display:flex}
-  table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:11px 12px;font-size:13px}
+  table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:11px 12px;font-size:13px;vertical-align:middle}
   thead th{color:var(--dim);font-weight:520;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
   tbody tr{transition:background .12s}tbody tr:hover{background:#1a1d23}
   .pill{padding:3px 10px;border-radius:8px;font-size:11px}.pill.ok{background:rgba(52,211,158,.13);color:var(--grn)}.pill.no{background:rgba(246,120,138,.13);color:var(--red)}
   .gate{max-width:430px;margin:100px auto;text-align:center}.gate input{width:100%;margin:14px 0}
   .tok{background:var(--panel2);padding:13px;border-radius:12px;word-break:break-all;margin-top:13px;font-size:13px}
-  .hide{display:none}.muted{color:var(--dim)}.h{display:flex;justify-content:space-between;align-items:center;margin:0 0 12px}
+  .hide{display:none}.muted{color:var(--dim)}.h{display:flex;justify-content:space-between;align-items:center;margin:0 0 14px}
   h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin:0}
+  .empty{text-align:center;color:var(--dim);padding:46px}
 </style>
 </head>
 <body>
@@ -66,28 +57,30 @@
   </header>
   <main>
     <div class="stats">
+      <div class="card stat"><div class="n" id="s_keys">0</div><div class="l">Access keys</div></div>
       <div class="card stat"><div class="n" id="s_req">0</div><div class="l">Requests</div></div>
-      <div class="card stat"><div class="n" id="s_tok">0</div><div class="l">Tokens (in/out)</div></div>
+      <div class="card stat"><div class="n" id="s_tok">0/0</div><div class="l">Tokens (in/out)</div></div>
       <div class="card stat"><div class="n" id="s_cost" style="color:var(--grn)">$0</div><div class="l">Cost</div></div>
-      <div class="card stat"><div class="n" id="s_prov">0</div><div class="l">Providers connected</div></div>
     </div>
 
     <div class="tabs">
-      <div class="tab on" data-t="harnesses" onclick="tab('harnesses')">Harnesses</div>
-      <div class="tab" data-t="providers" onclick="tab('providers')">Model endpoints</div>
+      <div class="tab on" data-t="keys" onclick="tab('keys')">Access keys</div>
       <div class="tab" data-t="tokens" onclick="tab('tokens')">Machine tokens</div>
       <div class="tab" data-t="models" onclick="tab('models')">Model routing</div>
       <div class="tab" data-t="activity" onclick="tab('activity')">Activity</div>
     </div>
 
-    <section id="t_harnesses">
-      <p class="muted" style="margin:0 0 14px">The agents you run. Connect each auth method once — the machine running the harness then holds only a <code>pa_</code> token.</p>
-      <div class="grid" id="harngrid"></div>
-    </section>
-
-    <section id="t_providers" class="hide">
-      <p class="muted" style="margin:0 0 14px">Raw model backends for model-agnostic harnesses (aider, Cline, Codex pointed elsewhere…).</p>
-      <div class="grid" id="provgrid"></div>
+    <section id="t_keys">
+      <div class="h"><h2>Access keys</h2><button onclick="openCreate()">+ Create access key</button></div>
+      <div class="card hide" id="createForm" style="margin-bottom:16px">
+        <div class="row" style="margin-bottom:11px">
+          <select id="cf_provider" onchange="onProvider()" style="flex:1"></select>
+          <select id="kind_cf" onchange="onKind('cf')" style="width:140px"></select>
+        </div>
+        <div id="ff_cf"></div>
+        <div class="row" style="margin-top:11px"><button onclick="createKey()">Create access key</button><button class="ghost" onclick="openCreate()">Cancel</button></div>
+      </div>
+      <div id="keylist"></div>
     </section>
 
     <section id="t_tokens" class="hide">
@@ -109,8 +102,7 @@
       <div class="card" style="margin-bottom:16px">
         <div class="h"><h2>Remap a model</h2></div>
         <div class="row">
-          <input id="al_match" placeholder="match: * or gpt-4o"/>
-          <span class="muted">→</span>
+          <input id="al_match" placeholder="match: * or gpt-4o"/><span class="muted">→</span>
           <input id="al_target" placeholder="target: mock or anthropic:claude-sonnet-4-5" style="flex:1"/>
           <button onclick="setAlias()">Map</button>
         </div>
@@ -132,32 +124,43 @@ async function api(p,o={}){const r=await fetch(p,{...o,headers:{...H(),...(o.hea
 function val(id){return document.getElementById(id).value.trim()}
 function saveAdmin(){const v=document.getElementById("admintok").value.trim();if(v){localStorage.setItem("pa_admin",v);boot()}}
 function logout(){localStorage.removeItem("pa_admin");document.getElementById("app").classList.add("hide");document.getElementById("gate").classList.remove("hide")}
-function tab(t){document.querySelectorAll(".tab").forEach(e=>e.classList.toggle("on",e.dataset.t===t));["harnesses","providers","tokens","models","activity"].forEach(s=>document.getElementById("t_"+s).classList.toggle("hide",s!==t))}
+function tab(t){document.querySelectorAll(".tab").forEach(e=>e.classList.toggle("on",e.dataset.t===t));["keys","tokens","models","activity"].forEach(s=>document.getElementById("t_"+s).classList.toggle("hide",s!==t))}
 
-// ---- provider logos (inline, brand-tinted) ----
+// logos: real brand marks via the Simple Icons CDN, tinted; fall back to a drawn mark offline.
 const MARK={
   anthropic:'<path d="M9.6 3 3 21h4.1l1.2-3.5h5.9L15.4 21H20L13.4 3H9.6Zm-.4 10.5 1.9-5.4 2 5.4H9.2Z"/>',
   openai:'<path d="M12 2.6c1.9 0 3.5 1.3 4 3a4.2 4.2 0 0 1 2.3 6.8 4.2 4.2 0 0 1-4 5.8 4.2 4.2 0 0 1-8.6-1A4.2 4.2 0 0 1 5.7 12 4.2 4.2 0 0 1 8 5.5a4.2 4.2 0 0 1 4-2.9Zm0 4.6a4.8 4.8 0 1 0 0 9.6 4.8 4.8 0 0 0 0-9.6Z"/>',
   gemini:'<path d="M12 2c.4 4.6 3.4 7.6 8 8-4.6.4-7.6 3.4-8 8-.4-4.6-3.4-7.6-8-8 4.6-.4 7.6-3.4 8-8Z"/>',
-  groq:'<path d="M12 3a6 6 0 1 0 4.2 10.3l-2-2A3.2 3.2 0 1 1 12 6.2c.9 0 1.6.3 2.2.8L16.3 5A6 6 0 0 0 12 3Zm2 7v3.3h2.6V10H14Z"/>',
-  openrouter:'<path d="M3 8h6l3 4 3-4h6M3 16h6l3-4M21 8l-3 8h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
-  mistral:'<g><rect x="3" y="4" width="3.4" height="3.4"/><rect x="17.6" y="4" width="3.4" height="3.4"/><rect x="7.3" y="8.3" width="3.4" height="3.4"/><rect x="13.3" y="8.3" width="3.4" height="3.4"/><rect x="3" y="12.6" width="3.4" height="3.4"/><rect x="17.6" y="12.6" width="3.4" height="3.4"/><rect x="3" y="16.9" width="18" height="3.1"/></g>',
-  deepseek:'<path d="M4 9c3 0 4 2 7 2s4-3 8-2c-1 4-5 7-9 7-3 0-6-2-6-5 0-1 0-2 0-2Zm12 1.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z"/>',
   xai:'<path d="M4 4h3.2l4 5.6L15.8 4H19l-6 8 6.2 8h-3.2l-4.4-6L7 20H4l6.4-8.4L4 4Z"/>',
-  together:'<path d="M8 5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7Zm8 7a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7ZM10.5 12.5l3-1.5" fill="none" stroke="currentColor" stroke-width="2"/>',
 };
-// real brand logos via the Simple Icons CDN, tinted to the brand colour; falls back to
-// the drawn mark / letter if a slug is missing or the CDN is unreachable (offline).
 const SLUG={anthropic:"anthropic",openai:"openai",gemini:"googlegemini",groq:"groq",mistral:"mistralai",deepseek:"deepseek",xai:"x"};
-function logo(name,color){
-  const mark=MARK[name]?`<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">${MARK[name]}</svg>`:`<b>${(name[0]||"?").toUpperCase()}</b>`;
-  const inner=SLUG[name]
-    ?`<img src="https://cdn.simpleicons.org/${SLUG[name]}/${color.replace("#","")}" alt="${name}" onerror="this.closest('.tile').classList.add('fb')"/><span class="fbm">${mark}</span>`
-    :`<span class="fbm" style="display:flex">${mark}</span>`;
-  return `<div class="tile" style="background:${hexa(color,.14)};color:${color}">${inner}</div>`;
-}
 function hexa(h,a){const n=h.replace("#","");const x=parseInt(n.length===3?n.split("").map(c=>c+c).join(""):n,16);return `rgba(${(x>>16)&255},${(x>>8)&255},${x&255},${a})`}
+function logo(name,color){color=color||"#888";
+  const mark=MARK[name]?`<svg viewBox="0 0 24 24" width="21" height="21" fill="currentColor">${MARK[name]}</svg>`:`<b>${(name[0]||"?").toUpperCase()}</b>`;
+  const inner=SLUG[name]?`<img src="https://cdn.simpleicons.org/${SLUG[name]}/${color.replace("#","")}" alt="${name}" onerror="this.closest('.tile').classList.add('fb')"/><span class="fbm">${mark}</span>`:`<span class="fbm" style="display:flex">${mark}</span>`;
+  return `<div class="tile" style="background:${hexa(color,.14)};color:${color}">${inner}</div>`}
 
+// the auth-type fields (the "provider" is essentially the auth type)
+function fieldsFor(uid,kind){
+  if(kind==="bedrock")return `<div class="row"><input id="f1_${uid}" placeholder="AWS access key id" style="flex:1"/><input id="f3_${uid}" placeholder="region (us-east-1)" style="width:150px"/></div><input id="f2_${uid}" type="password" placeholder="AWS secret access key" style="width:100%;margin-top:8px"/>`;
+  if(kind==="azure")return `<input id="f1_${uid}" placeholder="Azure endpoint URL (…/chat/completions?api-version=…)" style="width:100%"/><input id="f2_${uid}" type="password" placeholder="api-key" style="width:100%;margin-top:8px"/>`;
+  if(kind==="vertex")return `<span class="muted" style="font-size:12px">Vertex (service-account JSON) — coming next.</span>`;
+  return `<input id="f1_${uid}" type="password" placeholder="${kind==='oauth'?'OAuth access token':'API key'}" style="width:100%"/>`;
+}
+function onKind(uid){document.getElementById("ff_"+uid).innerHTML=fieldsFor(uid,document.getElementById("kind_"+uid).value)}
+async function submitCred(uid,provider){
+  const kind=document.getElementById("kind_"+uid).value,g=id=>{const e=document.getElementById(id);return e?e.value.trim():""};
+  let secret,meta={};
+  if(kind==="bedrock"){secret=g("f2_"+uid);meta={access_key:g("f1_"+uid),region:g("f3_"+uid)||"us-east-1"}}
+  else if(kind==="azure"){secret=g("f2_"+uid);meta={endpoint:g("f1_"+uid)}}
+  else if(kind==="vertex"){return}
+  else{secret=g("f1_"+uid)}
+  if(!secret)return;
+  await api("/admin/providers",{method:"POST",body:JSON.stringify({provider,secret,kind,meta})});refreshKeys();
+}
+async function disconnect(id){await api("/admin/providers/"+id,{method:"DELETE"});refreshKeys()}
+
+let CATALOG=[];
 async function boot(){
   try{
     const u=await(await api("/admin/usage")).json();
@@ -167,61 +170,21 @@ async function boot(){
     document.getElementById("s_cost").textContent="$"+(u.usage.cost_usd||0).toFixed(4);
     document.getElementById("badge_backend").textContent=u.backend;
     document.getElementById("enc").textContent=u.encryption?"🔒 encrypted at rest":"⚠ encryption off";
-    renderHarnesses();refreshProviders();refreshTokens();refreshAliases();refreshLogs();
+    refreshKeys();refreshTokens();refreshAliases();refreshLogs();
   }catch(e){document.getElementById("gateerr").textContent="Invalid admin token."}
 }
-async function renderHarnesses(){
-  const d=await(await api("/admin/harnesses")).json();
-  document.getElementById("harngrid").innerHTML=d.harnesses.map(h=>{
-    const chips=h.auth.map(a=>{
-      const cls=a.connected?"badge on":(a.ready?"badge":"badge");
-      const tag=a.connected?"✓ connected":(a.ready?"connect":"soon");
-      return `<span class="${cls}" title="${a.ready?'available now':'coming soon'}">${a.label} · ${tag}</span>`}).join("");
-    return `<div class="prov"><div class="top">${logo(h.provider,h.color)}<div style="flex:1"><h3>${h.label}</h3><div class="ep">runs on ${h.provider}</div></div>
-      ${h.configured?'<span class="pill ok">ready</span>':'<span class="pill no">connect a key</span>'}</div>
-      <div class="badges">${chips}</div>
-      <div class="models mono" style="font-size:11px">${h.install}</div>
-      <div class="row"><button class="sm" onclick="openConnect('h_${h.name}')">+ Connect auth</button></div>
-      <div class="connect" id="c_h_${h.name}">${connectForm('h_'+h.name, h.auth.map(a=>a.mode), h.provider)}</div></div>`}).join("");
+async function refreshKeys(){
+  const d=await(await api("/admin/catalog")).json();CATALOG=d.providers;
+  const keys=[];d.providers.forEach(p=>{(p.creds||[]).forEach(c=>keys.push({...c,provider:p.name,plabel:p.label,color:p.color}));if(p.via_env)keys.push({provider:p.name,plabel:p.label,color:p.color,kind:"api_key",masked:"env",id:null})});
+  document.getElementById("s_keys").textContent=keys.length;
+  document.getElementById("keylist").innerHTML=keys.length
+    ?`<div class="card"><table><thead><tr><th></th><th>Provider</th><th>Auth type</th><th>Key</th><th></th></tr></thead><tbody>${keys.map(k=>`<tr><td style="width:50px">${logo(k.provider,k.color)}</td><td>${k.plabel}</td><td><span class="badge on">${k.kind}</span></td><td class="mono">${k.masked||""}</td><td>${k.id?`<button class="danger sm" onclick="disconnect('${k.id}')">remove</button>`:'<span class="muted" style="font-size:11px">from env</span>'}</td></tr>`).join("")}</tbody></table></div>`
+    :`<div class="card empty">No access keys yet.<br/><span style="font-size:12.5px">Click <b style="color:var(--txt)">+ Create access key</b> to add one.</span></div>`;
+  const ps=document.getElementById("cf_provider");if(ps&&!ps.dataset.init){ps.dataset.init="1";ps.innerHTML=CATALOG.map(p=>`<option value="${p.name}">${p.label}</option>`).join("");onProvider()}
 }
-async function refreshProviders(){
-  const d=await(await api("/admin/catalog")).json();const g=document.getElementById("provgrid");
-  let connected=0;
-  g.innerHTML=d.providers.map(p=>{const creds=p.creds||[];const on=p.via_env||creds.length;if(on)connected++;
-    const credrows=creds.map(c=>`<div class="row" style="justify-content:space-between;gap:6px"><span class="badge on">${c.kind} · ${c.masked||""}</span><button class="danger sm" onclick="disconnect('${c.id}')">remove</button></div>`).join("");
-    return `<div class="prov"><div class="top">${logo(p.name,p.color)}<div style="flex:1"><h3>${p.label}</h3><div class="ep">${p.shape} · ${p.name}</div></div>
-      ${on?'<span class="pill ok">on</span>':'<span class="pill no">off</span>'}</div>
-      <div class="badges">${p.kinds.map(k=>`<span class="badge">${k}</span>`).join("")}${p.via_env?'<span class="badge on">env</span>':''}</div>
-      <div style="display:flex;flex-direction:column;gap:6px;margin:6px 0 11px">${credrows||'<span class="muted" style="font-size:11.5px">No keys yet</span>'}</div>
-      <div class="row"><button class="sm" onclick="openConnect('${p.name}')">+ Add credential</button></div>
-      <div class="connect" id="c_${p.name}">${connectForm(p.name,p.kinds,p.name)}</div></div>`}).join("");
-  document.getElementById("s_prov").textContent=connected;
-}
-function openConnect(n){document.getElementById("c_"+n).classList.toggle("open")}
-function fieldsFor(uid,kind){
-  if(kind==="bedrock")return `<input id="f1_${uid}" placeholder="AWS access key id"/><input id="f2_${uid}" type="password" placeholder="AWS secret access key"/><input id="f3_${uid}" placeholder="region (default us-east-1)"/>`;
-  if(kind==="azure")return `<input id="f1_${uid}" placeholder="Azure endpoint URL (…/chat/completions?api-version=…)"/><input id="f2_${uid}" type="password" placeholder="api-key"/>`;
-  if(kind==="vertex")return `<span class="muted" style="font-size:12px">Vertex (service-account JSON) — coming next.</span>`;
-  return `<input id="f1_${uid}" type="password" placeholder="${kind==='oauth'?'OAuth access token':'API key'}"/>`;
-}
-function onKind(uid){document.getElementById("ff_"+uid).innerHTML=fieldsFor(uid,document.getElementById("kind_"+uid).value)}
-function connectForm(uid,kinds,provider){
-  return `<select id="kind_${uid}" onchange="onKind('${uid}')">${kinds.map(k=>`<option value="${k}">${k}</option>`).join("")}</select>
-    <div id="ff_${uid}">${fieldsFor(uid,kinds[0])}</div>
-    <div class="row"><button class="sm" onclick="submitCred('${uid}','${provider}')">Add credential</button><button class="ghost sm" onclick="openConnect('${uid}')">Cancel</button></div>`;
-}
-async function submitCred(uid,provider){
-  const kind=document.getElementById("kind_"+uid).value,g=id=>{const e=document.getElementById(id);return e?e.value.trim():""};
-  let secret,meta={};
-  if(kind==="bedrock"){secret=g("f2_"+uid);meta={access_key:g("f1_"+uid),region:g("f3_"+uid)||"us-east-1"}}
-  else if(kind==="azure"){secret=g("f2_"+uid);meta={endpoint:g("f1_"+uid)}}
-  else if(kind==="vertex"){return}
-  else{secret=g("f1_"+uid)}
-  if(!secret)return;
-  await api("/admin/providers",{method:"POST",body:JSON.stringify({provider,secret,kind,meta})});
-  renderHarnesses();refreshProviders();
-}
-async function disconnect(id){await api("/admin/providers/"+id,{method:"DELETE"});renderHarnesses();refreshProviders()}
+function onProvider(){const p=CATALOG.find(x=>x.name===val("cf_provider"))||{};const ks=document.getElementById("kind_cf");ks.innerHTML=(p.kinds||["api_key"]).map(k=>`<option value="${k}">${k}</option>`).join("");onKind("cf")}
+function openCreate(){document.getElementById("createForm").classList.toggle("hide")}
+async function createKey(){await submitCred("cf",val("cf_provider"));document.getElementById("createForm").classList.add("hide")}
 
 async function refreshTokens(){const d=await(await api("/admin/tokens")).json();
   document.getElementById("toks").innerHTML=d.tokens.map(t=>`<tr><td class="mono">${t.id}</td><td>${t.label||""}</td><td class="mono">${t.masked||""}</td><td class="mono">${(t.scope||[]).join(", ")}</td><td class="mono">${t.budget_usd?('$'+(t.spent_usd||0).toFixed(4)+' / $'+(+t.budget_usd).toFixed(2)):'—'}</td><td>${t.revoked?'<span class="pill no">revoked</span>':'<span class="pill ok">active</span>'}</td><td>${t.revoked?"":`<button class="danger sm" onclick="revokeTok('${t.id}')">revoke</button>`}</td></tr>`).join("")}

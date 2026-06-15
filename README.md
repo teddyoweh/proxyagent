@@ -67,13 +67,13 @@ claude -p "ship it"
 ```
 
 ## The dashboard
-`proxyagent serve` ships a real dashboard at `/` (reveal the admin token with
+`proxyagent serve` ships a dashboard at `/` (reveal the admin token with
 `proxyagent admin-token`):
 
-- **Providers** — a branded catalog of every supported provider; **connect/disconnect**
-  with a key right from the UI, see which auth types each supports (api_key / oauth) and
-  whether it's on via env or stored credentials.
-- **Machine tokens** — mint (scoped/TTL), list, revoke.
+- **Access keys** — the credentials you create. Each is a provider + an auth type
+  (Anthropic · API key, Anthropic · Bedrock, OpenAI · Azure, …); pick the type, enter the
+  key/fields, done. Listed with provider logo · auth type · masked key · remove.
+- **Machine tokens** — mint (scoped / TTL / budget), list, revoke.
 - **Model routing** — add/remove model remaps (e.g. `* → mock` for offline).
 - **Activity** — live request log with usage + cost, and headline stats.
 
