@@ -70,3 +70,40 @@ def test_healthz_and_ui():
     c = _client()
     assert c.get("/healthz").json()["ok"] is True
     assert "proxyagent" in c.get("/").text
+
+
+def test_pricing():
+    from proxyagent.pricing import cost_usd
+    # 1M in @ $3, 1M out @ $15 for sonnet
+    assert cost_usd("claude-sonnet-4-5", 1_000_000, 1_000_000) == 18.0
+    assert cost_usd("gpt-4o-mini", 1_000_000, 0) == 0.15
+    assert cost_usd("unknown-model", 100, 100) is None
+
+
+def test_credential_storage_and_resolution():
+    from proxyagent.config import PROVIDERS
+    from proxyagent.providers import resolve_auth
+    s = Store(":memory:")
+    # env fallback when nothing stored
+    headers, ok = resolve_auth(PROVIDERS["openai"], s)
+    cid = s.add_credential("openai", "sk-real-key", kind="api_key", label="prod")
+    cred = s.get_credential("openai")
+    assert cred["secret"] == "sk-real-key"               # decrypted roundtrip
+    # list never leaks the secret
+    listed = s.list_credentials()
+    assert listed[0]["provider"] == "openai" and "secret" not in listed[0]
+    # resolve_auth now uses the stored credential
+    headers, ok = resolve_auth(PROVIDERS["openai"], s)
+    assert ok and headers["Authorization"] == "Bearer sk-real-key"
+    assert s.remove_credential(cid)
+
+
+def test_provider_admin_endpoints():
+    c = _client()
+    r = c.post("/admin/providers", headers=ADMIN, json={"provider": "anthropic", "secret": "sk-ant-x"})
+    assert r.status_code == 200 and r.json()["provider"] == "anthropic"
+    listed = c.get("/admin/providers", headers=ADMIN).json()
+    assert "anthropic" in listed["configured"]
+    # unknown provider rejected
+    assert c.post("/admin/providers", headers=ADMIN,
+                  json={"provider": "nope", "secret": "x"}).status_code == 400

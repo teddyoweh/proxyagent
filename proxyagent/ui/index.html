@@ -46,6 +46,7 @@
       <div class="card stat"><div class="n" id="s_req">0</div><div class="l">Requests</div></div>
       <div class="card stat"><div class="n" id="s_in">0</div><div class="l">Input tokens</div></div>
       <div class="card stat"><div class="n" id="s_out">0</div><div class="l">Output tokens</div></div>
+      <div class="card stat"><div class="n" id="s_cost" style="color:var(--grn)">$0</div><div class="l">Cost</div></div>
       <div class="card stat"><div class="n" id="s_tools">0</div><div class="l">Proxied tools</div></div>
     </div>
 
@@ -85,8 +86,9 @@ async function boot() {
     document.getElementById("s_req").textContent = u.usage.requests;
     document.getElementById("s_in").textContent = u.usage.prompt_tokens;
     document.getElementById("s_out").textContent = u.usage.completion_tokens;
+    document.getElementById("s_cost").textContent = "$" + (u.usage.cost_usd || 0).toFixed(4);
     document.getElementById("s_tools").textContent = (u.tools||[]).length;
-    document.getElementById("provs").textContent = "providers: " + ((u.providers||[]).join(", ") || "none");
+    document.getElementById("provs").textContent = `${u.backend||"sqlite"} · providers: ` + ((u.providers||[]).join(", ") || "none");
     refreshTokens(); refreshLogs();
   } catch (e) { document.getElementById("gateerr").textContent = "Invalid admin token."; }
 }

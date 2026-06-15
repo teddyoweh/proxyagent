@@ -12,6 +12,7 @@ import json
 
 import httpx
 
+from . import pricing
 from .config import Config, PROVIDERS
 from .store import Store, now_ms
 
@@ -20,6 +21,21 @@ ROUTES = {
     "anthropic": ("anthropic", "/v1/messages"),
     "openai": ("openai", "/v1/chat/completions"),
 }
+
+
+def resolve_auth(provider, store: Store | None) -> tuple[dict, bool]:
+    """Auth headers for an upstream call. A stored credential (proxy_agent_keys) wins
+    over the env key; returns ({}, False) when nothing is configured."""
+    cred = store.get_credential(provider.name) if store else None
+    if cred:
+        secret, kind = cred["secret"], cred["kind"]
+        if kind == "oauth":
+            return {"Authorization": f"Bearer {secret}", **provider.extra_headers}, True
+        if provider.auth_style == "x-api-key":
+            return {"x-api-key": secret, **provider.extra_headers}, True
+        return {"Authorization": f"Bearer {secret}", **provider.extra_headers}, True
+    headers = provider.auth_headers()
+    return headers, bool(headers)
 
 
 def scope_allows(scope: list[str], provider: str, model: str) -> bool:
@@ -44,11 +60,13 @@ async def forward(
 ):
     """Forward a request upstream. Returns (status, headers, body_iter_or_dict, log_after)."""
     provider = PROVIDERS[provider_name]
-    if not provider.key:
-        return 502, {}, {"error": f"provider '{provider_name}' not configured on the proxy"}, None
+    auth, ok = resolve_auth(provider, store)
+    if not ok:
+        return 502, {}, {"error": f"provider '{provider_name}' not configured on the proxy "
+                                  f"(set {provider.key_env} or `proxyagent provider add {provider_name}`)"}, None
 
     url = provider.base_url + upstream_path
-    headers = {"content-type": "application/json", **provider.auth_headers()}
+    headers = {"content-type": "application/json", **auth}
     model = body.get("model", "")
     t0 = now_ms()
 
@@ -57,7 +75,8 @@ async def forward(
             token_id=token["id"], token_label=token.get("label"), provider=provider_name,
             model=model, status=status, prompt_tokens=ptok, completion_tokens=ctok,
             latency_ms=now_ms() - t0, streamed=1 if streaming else 0,
-            tools_used=json.dumps(tools_used or []), error=err,
+            tools_used=json.dumps(tools_used or []), cost_usd=pricing.cost_usd(model, ptok, ctok),
+            error=err,
         )
 
     if streaming:

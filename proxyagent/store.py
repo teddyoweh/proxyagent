@@ -1,49 +1,40 @@
-"""Persistence — machine tokens (hashed) + a full request/usage audit log.
+"""Persistence — machine tokens, stored provider credentials, and call traces+cost.
 
-SQLite, guarded by a lock so it's safe across the server's worker threads.
+Backend is SQLite (local) or Postgres (via URL) — see db.py. Tables:
+  * proxy_agent_tokens  — machine tokens (hashed)
+  * proxy_agent_keys    — provider credentials you add (api_key / oauth), encrypted
+  * proxy_agent_calls   — every proxied request: usage, latency, cost, tools, errors
 """
 
 from __future__ import annotations
 
 import json
-import sqlite3
-import threading
 import time
 import uuid
 from pathlib import Path
 
+from . import crypto
+from .db import DB
 from .security import hash_token, new_token, mask
 
 _SCHEMA = """
-CREATE TABLE IF NOT EXISTS tokens (
-    id          TEXT PRIMARY KEY,
-    hash        TEXT NOT NULL UNIQUE,
-    label       TEXT,
-    scope_json  TEXT NOT NULL DEFAULT '["*"]',   -- allowed "provider:model" globs
-    rate_limit  INTEGER NOT NULL DEFAULT 0,       -- max requests/min (0 = unlimited)
-    created_ms  INTEGER,
-    expires_ms  INTEGER,                          -- NULL = never
-    revoked     INTEGER NOT NULL DEFAULT 0,
-    last_used_ms INTEGER,
-    masked      TEXT
+CREATE TABLE IF NOT EXISTS proxy_agent_tokens (
+    id TEXT PRIMARY KEY, hash TEXT NOT NULL UNIQUE, label TEXT,
+    scope_json TEXT NOT NULL DEFAULT '["*"]', rate_limit INTEGER NOT NULL DEFAULT 0,
+    created_ms BIGINT, expires_ms BIGINT, revoked INTEGER NOT NULL DEFAULT 0,
+    last_used_ms BIGINT, masked TEXT
 );
-CREATE TABLE IF NOT EXISTS logs (
-    id           TEXT PRIMARY KEY,
-    ts_ms        INTEGER,
-    token_id     TEXT,
-    token_label  TEXT,
-    provider     TEXT,
-    model        TEXT,
-    status       INTEGER,
-    prompt_tokens     INTEGER,
-    completion_tokens INTEGER,
-    latency_ms   INTEGER,
-    streamed     INTEGER,
-    tools_used   TEXT,
-    error        TEXT
+CREATE TABLE IF NOT EXISTS proxy_agent_keys (
+    id TEXT PRIMARY KEY, provider TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'api_key',
+    secret TEXT NOT NULL, refresh TEXT, expires_ms BIGINT, label TEXT,
+    created_ms BIGINT, meta_json TEXT, active INTEGER NOT NULL DEFAULT 1
 );
-CREATE INDEX IF NOT EXISTS idx_logs_ts ON logs (ts_ms DESC);
-CREATE INDEX IF NOT EXISTS idx_logs_token ON logs (token_id);
+CREATE TABLE IF NOT EXISTS proxy_agent_calls (
+    id TEXT PRIMARY KEY, ts_ms BIGINT, token_id TEXT, token_label TEXT,
+    provider TEXT, model TEXT, status INTEGER,
+    prompt_tokens INTEGER, completion_tokens INTEGER, latency_ms INTEGER,
+    streamed INTEGER, tools_used TEXT, cost_usd DOUBLE PRECISION, error TEXT
+);
 """
 
 
@@ -52,97 +43,112 @@ def now_ms() -> int:
 
 
 class Store:
-    def __init__(self, path: str | Path = ":memory:"):
-        self._lock = threading.RLock()
-        self._conn = sqlite3.connect(str(path), check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
-        self._conn.executescript(_SCHEMA)
-        self._conn.commit()
+    def __init__(self, path: str | Path = ":memory:", url: str | None = None):
+        self.db = DB(str(path), url=url)
+        self.db.executescript(_SCHEMA)
+        self.backend = "postgres" if self.db.pg else "sqlite"
 
-    # -- tokens ------------------------------------------------------------ #
+    # -- machine tokens ---------------------------------------------------- #
 
-    def create_token(self, label: str, scope: list[str], *, ttl_seconds: int | None = None,
-                     rate_limit: int = 0) -> tuple[str, dict]:
-        """Mint a token. Returns (plaintext_once, row). Plaintext is never stored."""
+    def create_token(self, label, scope, *, ttl_seconds=None, rate_limit=0):
         plain = new_token()
         tid = "tok_" + uuid.uuid4().hex[:12]
         expires = now_ms() + ttl_seconds * 1000 if ttl_seconds else None
-        with self._lock:
-            self._conn.execute(
-                """INSERT INTO tokens (id, hash, label, scope_json, rate_limit, created_ms,
-                                       expires_ms, masked)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (tid, hash_token(plain), label, json.dumps(scope), rate_limit, now_ms(),
-                 expires, mask(plain)),
-            )
-            self._conn.commit()
+        self.db.execute(
+            """INSERT INTO proxy_agent_tokens
+               (id, hash, label, scope_json, rate_limit, created_ms, expires_ms, masked)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (tid, hash_token(plain), label, json.dumps(scope), rate_limit, now_ms(),
+             expires, mask(plain)),
+        )
         return plain, self.get_token(tid)
 
-    def get_token(self, tid: str) -> dict | None:
-        with self._lock:
-            r = self._conn.execute("SELECT * FROM tokens WHERE id=?", (tid,)).fetchone()
-        return dict(r) if r else None
+    def get_token(self, tid):
+        return self.db.fetchone("SELECT * FROM proxy_agent_tokens WHERE id=?", (tid,))
 
-    def get_token_by_hash(self, h: str) -> dict | None:
-        with self._lock:
-            r = self._conn.execute("SELECT * FROM tokens WHERE hash=?", (h,)).fetchone()
-        return dict(r) if r else None
+    def get_token_by_hash(self, h):
+        return self.db.fetchone("SELECT * FROM proxy_agent_tokens WHERE hash=?", (h,))
 
-    def list_tokens(self) -> list[dict]:
-        with self._lock:
-            rows = self._conn.execute("SELECT * FROM tokens ORDER BY created_ms DESC").fetchall()
-        return [dict(r) for r in rows]
+    def list_tokens(self):
+        return self.db.fetchall("SELECT * FROM proxy_agent_tokens ORDER BY created_ms DESC")
 
-    def revoke_token(self, tid: str) -> bool:
-        with self._lock:
-            cur = self._conn.execute("UPDATE tokens SET revoked=1 WHERE id=?", (tid,))
-            self._conn.commit()
+    def revoke_token(self, tid):
+        cur = self.db.execute("UPDATE proxy_agent_tokens SET revoked=1 WHERE id=?", (tid,))
         return cur.rowcount > 0
 
-    def touch_token(self, tid: str) -> None:
-        with self._lock:
-            self._conn.execute("UPDATE tokens SET last_used_ms=? WHERE id=?", (now_ms(), tid))
-            self._conn.commit()
+    def touch_token(self, tid):
+        self.db.execute("UPDATE proxy_agent_tokens SET last_used_ms=? WHERE id=?", (now_ms(), tid))
 
-    def recent_request_count(self, tid: str, window_ms: int = 60_000) -> int:
-        with self._lock:
-            r = self._conn.execute(
-                "SELECT COUNT(*) c FROM logs WHERE token_id=? AND ts_ms>=?",
-                (tid, now_ms() - window_ms),
-            ).fetchone()
-        return r["c"]
+    def recent_request_count(self, tid, window_ms=60_000):
+        r = self.db.fetchone(
+            "SELECT COUNT(*) c FROM proxy_agent_calls WHERE token_id=? AND ts_ms>=?",
+            (tid, now_ms() - window_ms))
+        return (r or {}).get("c", 0)
 
-    # -- logs / usage ------------------------------------------------------ #
+    # -- provider credentials (proxy_agent_keys) --------------------------- #
 
-    def log_request(self, **kw) -> None:
-        kw.setdefault("id", "log_" + uuid.uuid4().hex[:12])
+    def add_credential(self, provider, secret, *, kind="api_key", refresh=None,
+                       expires_ms=None, label=None, meta=None):
+        cid = "key_" + uuid.uuid4().hex[:12]
+        # one active credential per provider: deactivate older ones
+        self.db.execute("UPDATE proxy_agent_keys SET active=0 WHERE provider=?", (provider,))
+        self.db.execute(
+            """INSERT INTO proxy_agent_keys
+               (id, provider, kind, secret, refresh, expires_ms, label, created_ms, meta_json, active)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)""",
+            (cid, provider, kind, crypto.encrypt(secret),
+             crypto.encrypt(refresh) if refresh else None, expires_ms, label, now_ms(),
+             json.dumps(meta or {})),
+        )
+        return cid
+
+    def get_credential(self, provider):
+        """Active credential for a provider, decrypted. None → fall back to env."""
+        r = self.db.fetchone(
+            "SELECT * FROM proxy_agent_keys WHERE provider=? AND active=1 ORDER BY created_ms DESC",
+            (provider,))
+        if not r:
+            return None
+        r = dict(r)
+        r["secret"] = crypto.decrypt(r["secret"])
+        if r.get("refresh"):
+            r["refresh"] = crypto.decrypt(r["refresh"])
+        return r
+
+    def list_credentials(self):
+        rows = self.db.fetchall("SELECT * FROM proxy_agent_keys ORDER BY created_ms DESC")
+        # never return the secret material
+        return [{"id": r["id"], "provider": r["provider"], "kind": r["kind"],
+                 "label": r["label"], "active": bool(r["active"]),
+                 "created_ms": r["created_ms"]} for r in rows]
+
+    def remove_credential(self, cid):
+        cur = self.db.execute("DELETE FROM proxy_agent_keys WHERE id=?", (cid,))
+        return cur.rowcount > 0
+
+    # -- call traces (proxy_agent_calls) ----------------------------------- #
+
+    def log_request(self, **kw):
+        kw.setdefault("id", "call_" + uuid.uuid4().hex[:12])
         kw.setdefault("ts_ms", now_ms())
         cols = ["id", "ts_ms", "token_id", "token_label", "provider", "model", "status",
-                "prompt_tokens", "completion_tokens", "latency_ms", "streamed", "tools_used", "error"]
-        vals = [kw.get(c) for c in cols]
-        with self._lock:
-            self._conn.execute(
-                f"INSERT INTO logs ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})", vals
-            )
-            self._conn.commit()
+                "prompt_tokens", "completion_tokens", "latency_ms", "streamed",
+                "tools_used", "cost_usd", "error"]
+        self.db.execute(
+            f"INSERT INTO proxy_agent_calls ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
+            tuple(kw.get(c) for c in cols))
 
-    def list_logs(self, limit: int = 200) -> list[dict]:
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT * FROM logs ORDER BY ts_ms DESC LIMIT ?", (limit,)
-            ).fetchall()
-        return [dict(r) for r in rows]
+    def list_logs(self, limit=200):
+        return self.db.fetchall("SELECT * FROM proxy_agent_calls ORDER BY ts_ms DESC LIMIT ?", (limit,))
 
-    def usage_summary(self) -> dict:
-        with self._lock:
-            r = self._conn.execute(
-                """SELECT COUNT(*) requests,
-                          COALESCE(SUM(prompt_tokens),0) prompt_tokens,
-                          COALESCE(SUM(completion_tokens),0) completion_tokens
-                   FROM logs"""
-            ).fetchone()
-        return dict(r)
+    def usage_summary(self):
+        r = self.db.fetchone(
+            """SELECT COUNT(*) requests,
+                      COALESCE(SUM(prompt_tokens),0) prompt_tokens,
+                      COALESCE(SUM(completion_tokens),0) completion_tokens,
+                      COALESCE(SUM(cost_usd),0) cost_usd
+               FROM proxy_agent_calls""")
+        return r or {"requests": 0, "prompt_tokens": 0, "completion_tokens": 0, "cost_usd": 0}
 
-    def close(self) -> None:
-        with self._lock:
-            self._conn.close()
+    def close(self):
+        self.db.close()

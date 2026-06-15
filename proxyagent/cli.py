@@ -68,6 +68,58 @@ def run_harness(
 
 token_app = typer.Typer(help="Mint / list / revoke machine tokens.")
 app.add_typer(token_app, name="token")
+provider_app = typer.Typer(help="Add / list / remove provider credentials (stored, encrypted).")
+app.add_typer(provider_app, name="provider")
+
+
+@provider_app.command("add")
+def provider_add(
+    provider: str = typer.Argument(..., help="anthropic | openai"),
+    key: str = typer.Option(..., "--key", "--secret", help="API key, or OAuth access token with --kind oauth."),
+    kind: str = typer.Option("api_key", "--kind", help="api_key | oauth"),
+    label: str = typer.Option(None, "--label"),
+    proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
+    admin: str = typer.Option(None, "--admin"),
+):
+    """Store a provider credential (encrypted if PROXYAGENT_SECRET_KEY is set)."""
+    with _admin_client(proxy, admin) as c:
+        r = c.post("/admin/providers", json={"provider": provider, "secret": key,
+                                             "kind": kind, "label": label})
+    if r.status_code >= 400:
+        err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
+    d = r.json()
+    note = "[green]encrypted[/green]" if d["stored"] == "encrypted" else "[yellow]plaintext — set PROXYAGENT_SECRET_KEY[/yellow]"
+    console.print(f"[green]✓[/green] stored [cyan]{provider}[/cyan] ({kind}) · {note}")
+
+
+@provider_app.command("ls")
+def provider_ls(proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
+                admin: str = typer.Option(None, "--admin")):
+    """List stored provider credentials (secrets never shown)."""
+    with _admin_client(proxy, admin) as c:
+        r = c.get("/admin/providers")
+    if r.status_code >= 400:
+        err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
+    d = r.json()
+    t = Table(title=f"Provider credentials  ·  encryption {'on' if d['encryption'] else 'OFF'}")
+    for col in ("ID", "Provider", "Kind", "Label", "Active"):
+        t.add_column(col)
+    for k in d["credentials"]:
+        t.add_row(k["id"], k["provider"], k["kind"], k.get("label") or "",
+                  "[green]yes[/green]" if k["active"] else "no")
+    console.print(t)
+    console.print(f"[dim]configured (env+stored): {', '.join(d['configured']) or 'none'}[/dim]")
+
+
+@provider_app.command("rm")
+def provider_rm(cred_id: str, proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
+                admin: str = typer.Option(None, "--admin")):
+    """Remove a stored credential."""
+    with _admin_client(proxy, admin) as c:
+        r = c.delete(f"/admin/providers/{cred_id}")
+    if r.status_code >= 400:
+        err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
+    console.print(f"[green]✓[/green] removed {cred_id}")
 
 
 @token_app.command("new")
@@ -132,13 +184,34 @@ def logs(limit: int = 50, proxy: str = typer.Option("http://127.0.0.1:8080", "--
         err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
     rows = r.json()["logs"]
     t = Table(title="Requests")
-    for col in ("Token", "Provider", "Model", "Status", "In", "Out", "ms"):
+    for col in ("Token", "Provider", "Model", "Status", "In", "Out", "Cost", "ms"):
         t.add_column(col)
     for g in rows:
+        cost = g.get("cost_usd")
         t.add_row(g.get("token_label") or "", g.get("provider") or "", (g.get("model") or "")[:28],
                   str(g.get("status") or ""), str(g.get("prompt_tokens") or "-"),
-                  str(g.get("completion_tokens") or "-"), str(g.get("latency_ms") or ""))
+                  str(g.get("completion_tokens") or "-"),
+                  f"${cost:.4f}" if cost else "-", str(g.get("latency_ms") or ""))
     console.print(t)
+
+
+@app.command()
+def usage(proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
+          admin: str = typer.Option(None, "--admin")):
+    """Totals: requests, tokens, and cost across all proxied calls."""
+    with _admin_client(proxy, admin) as c:
+        r = c.get("/admin/usage")
+    if r.status_code >= 400:
+        err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
+    d = r.json()
+    u = d["usage"]
+    console.print(Panel.fit(
+        f"[bold]{u['requests']}[/bold] requests   "
+        f"[bold]{u['prompt_tokens']:,}[/bold] in · [bold]{u['completion_tokens']:,}[/bold] out   "
+        f"[green]${u.get('cost_usd', 0):.4f}[/green]\n"
+        f"[dim]backend: {d.get('backend')} · providers: {', '.join(d['providers']) or 'none'} · "
+        f"encryption: {'on' if d.get('encryption') else 'off'}[/dim]",
+        title="usage", border_style="green"))
 
 
 if __name__ == "__main__":

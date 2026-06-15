@@ -73,6 +73,31 @@ export PROXYAGENT_TOOLS='[{"name":"crm","url":"https://hooks.you.com/crm","heade
 # the proxy executes calls to managed tools server-side (keys stay here).
 ```
 
+## Credentials, storage & cost
+
+By default provider keys come from the **environment** and stay local. Or **add** them
+once and they're stored **encrypted** (`proxy_agent_keys`) — locally in SQLite, or in
+**Postgres** if you point at one. Either way the machine never sees them.
+
+```bash
+export PROXYAGENT_SECRET_KEY=…                 # enables at-rest encryption (Fernet)
+proxyagent provider add anthropic --key sk-ant-…          # stored, encrypted
+proxyagent provider add openai --key sk-…  --kind api_key
+# OAuth: store an access token →  proxyagent provider add anthropic --key <oauth-token> --kind oauth
+proxyagent provider ls
+
+# Postgres-backed (shared, multi-instance): tables proxy_agent_keys / _tokens / _calls
+export PROXYAGENT_DATABASE_URL=postgresql://user:pass@host/db    # pip install 'proxyagent[postgres]'
+```
+
+Every call is traced in `proxy_agent_calls` with **token usage, latency, and computed
+cost** (per-model pricing, override via `PROXYAGENT_PRICING`). See it live:
+
+```bash
+proxyagent usage          # totals: requests · tokens · $ cost
+proxyagent logs           # per-request trace incl. cost
+```
+
 ## Security model
 - **Real keys never leave the proxy** — read from env, never persisted, never logged, never returned.
 - **Machine tokens are stored hashed** (SHA-256); plaintext shown once. A stolen DB yields nothing usable.

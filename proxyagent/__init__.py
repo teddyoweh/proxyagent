@@ -16,7 +16,7 @@ from typing import Optional
 
 from .harness import run  # noqa: F401  (the headline SDK call)
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __all__ = ["run", "serve", "create_app", "Config", "Admin", "__version__"]
 
 
@@ -61,5 +61,21 @@ class Admin:
     def revoke(self, token_id: str) -> None:
         self._c.delete(f"/admin/tokens/{token_id}").raise_for_status()
 
+    def add_provider(self, provider: str, secret: str, kind: str = "api_key",
+                     label: Optional[str] = None) -> str:
+        r = self._c.post("/admin/providers", json={
+            "provider": provider, "secret": secret, "kind": kind, "label": label})
+        r.raise_for_status()
+        return r.json()["id"]
+
+    def providers(self) -> dict:
+        return self._c.get("/admin/providers").json()
+
+    def remove_provider(self, cred_id: str) -> None:
+        self._c.delete(f"/admin/providers/{cred_id}").raise_for_status()
+
     def logs(self, limit: int = 100) -> list:
         return self._c.get("/admin/logs", params={"limit": limit}).json()["logs"]
+
+    def usage(self) -> dict:
+        return self._c.get("/admin/usage").json()

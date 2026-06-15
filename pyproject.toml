@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "proxyagent"
-version = "0.1.0"
+version = "0.2.0"
 description = "Run any agent (Claude, Codex, custom) on any machine — with no API key on the machine. A secure, self-hosted proxy for models and tools."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -29,6 +29,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+postgres = ["psycopg[binary]>=3.1"]      # store keys/calls in Postgres via PROXYAGENT_DATABASE_URL
+secure = ["cryptography>=42.0"]          # encrypt stored provider credentials at rest
+all = ["psycopg[binary]>=3.1", "cryptography>=42.0"]
 
 [project.scripts]
 proxyagent = "proxyagent.cli:app"

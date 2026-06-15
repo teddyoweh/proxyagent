@@ -14,6 +14,7 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
+from . import crypto
 from .config import Config, PROVIDERS
 from .providers import ROUTES, forward, scope_allows
 from .security import token_matches
@@ -28,6 +29,14 @@ class TokenBody(BaseModel):
     scope: list[str] = ["*"]
     ttl_seconds: int | None = None
     rate_limit: int = 0
+
+
+class ProviderBody(BaseModel):
+    provider: str
+    secret: str
+    kind: str = "api_key"            # api_key | oauth
+    label: str | None = None
+    refresh: str | None = None
 
 
 def create_app(config: Config | None = None) -> FastAPI:
@@ -163,17 +172,50 @@ def create_app(config: Config | None = None) -> FastAPI:
         require_admin(authorization, x_admin_token)
         return {"logs": store.list_logs(limit)}
 
+    def _configured() -> list[str]:
+        env = set(config.configured_providers())
+        db = {c["provider"] for c in store.list_credentials() if c["active"]}
+        return sorted(env | db)
+
     @app.get("/admin/usage")
     async def usage_ep(authorization: str | None = Header(None),
                        x_admin_token: str | None = Header(None)):
         require_admin(authorization, x_admin_token)
-        return {"usage": store.usage_summary(),
-                "providers": config.configured_providers(),
-                "tools": tools.list()}
+        return {"usage": store.usage_summary(), "providers": _configured(),
+                "tools": tools.list(), "backend": store.backend,
+                "encryption": crypto.encryption_available()}
+
+    # -- provider credentials (proxy_agent_keys) -------------------------- #
+    @app.post("/admin/providers")
+    async def add_provider(body: ProviderBody, authorization: str | None = Header(None),
+                           x_admin_token: str | None = Header(None)):
+        require_admin(authorization, x_admin_token)
+        if body.provider not in PROVIDERS:
+            raise HTTPException(400, f"unknown provider; known: {list(PROVIDERS)}")
+        cid = store.add_credential(body.provider, body.secret, kind=body.kind,
+                                   label=body.label, refresh=body.refresh)
+        return {"id": cid, "provider": body.provider, "kind": body.kind,
+                "stored": "encrypted" if crypto.encryption_available() else "plaintext"}
+
+    @app.get("/admin/providers")
+    async def list_providers(authorization: str | None = Header(None),
+                             x_admin_token: str | None = Header(None)):
+        require_admin(authorization, x_admin_token)
+        return {"credentials": store.list_credentials(), "configured": _configured(),
+                "encryption": crypto.encryption_available()}
+
+    @app.delete("/admin/providers/{cid}")
+    async def del_provider(cid: str, authorization: str | None = Header(None),
+                           x_admin_token: str | None = Header(None)):
+        require_admin(authorization, x_admin_token)
+        if not store.remove_credential(cid):
+            raise HTTPException(404, "no such credential")
+        return {"ok": True}
 
     @app.get("/healthz")
     async def healthz():
-        return {"ok": True, "providers": config.configured_providers(), "tools": tools.names()}
+        return {"ok": True, "providers": _configured(), "tools": tools.names(),
+                "backend": store.backend}
 
     # ------------------------------------------------------------------ #
     # Dashboard
