@@ -70,6 +70,11 @@ def build_plans(provider, store: Store | None, body: dict) -> list[tuple]:
                     plans.append(signers.bedrock_plan(c, body))
                 except Exception:  # noqa: BLE001 — skip a malformed bedrock cred
                     pass
+            elif kind == "vertex":
+                try:
+                    plans.append(signers.vertex_plan(c, body))
+                except Exception:  # noqa: BLE001 — skip if SA invalid / token fetch fails
+                    pass
     if provider.key:
         plans.append((provider.endpoint, {**JSON, **provider.auth_headers()}, raw))
     return plans

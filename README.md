@@ -147,9 +147,9 @@ is to centralise *all* of them so the machine running the harness holds only a `
 | **Gemini CLI** | Google | API key · OAuth · Vertex |
 
 Connect each mode in the dashboard's **Harnesses** tab (or `proxyagent provider add … --kind`).
-**API key, OAuth, AWS Bedrock, and Azure are wired today** — for Bedrock the proxy holds the AWS
-credentials and **SigV4-signs** the Claude-on-Bedrock request itself, so the machine needs no
-AWS at all. (Vertex lands next.) The model providers below are the *backends* for model-agnostic
+**Every auth mode is wired**: API key, OAuth, AWS Bedrock (the proxy SigV4-signs the Claude-on-Bedrock
+request itself), Azure, and Google Vertex (service-account JSON → access token → Claude-on-Vertex).
+For Bedrock/Vertex the proxy holds the AWS/GCP credentials and signs upstream, so the machine needs no cloud creds at all. The model providers below are the *backends* for model-agnostic
 harnesses (aider, Cline…).
 
 ```bash
@@ -157,6 +157,7 @@ harnesses (aider, Cline…).
 proxyagent provider add anthropic --kind bedrock --key <AWS_SECRET>   # + meta: access_key, region
 proxyagent provider add openai    --kind azure   --key <AZURE_KEY>    # + meta: endpoint
 proxyagent provider add anthropic --kind oauth    --key <OAUTH_TOKEN>
+proxyagent provider add anthropic --kind vertex  --key "$(cat sa.json)"   # + meta: region
 ```
 
 ## Credential pools & failover

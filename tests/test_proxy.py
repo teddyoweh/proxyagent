@@ -236,3 +236,28 @@ def test_bedrock_plan_and_build_plans():
     s.add_credential("anthropic", "awssecret", kind="bedrock", meta={"access_key": "AKID", "region": "us-east-1"})
     plans = build_plans(PROVIDERS["anthropic"], s, {"model": "claude-sonnet-4-5", "messages": []})
     assert len(plans) == 2 and plans[0][0].endswith("/v1/messages") and "bedrock-runtime" in plans[1][0]
+
+
+def test_vertex_assertion_and_url():
+    import base64, json
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import padding, rsa
+    from proxyagent.signers import vertex_signed_assertion, vertex_url
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    pem = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                            serialization.NoEncryption()).decode()
+    sa = {"client_email": "svc@proj.iam.gserviceaccount.com", "private_key": pem,
+          "token_uri": "https://oauth2.googleapis.com/token"}
+    jwt = vertex_signed_assertion(sa, now=1700000000)
+    parts = jwt.split(".")
+    assert len(parts) == 3
+    b64d = lambda s: base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+    header, claims = json.loads(b64d(parts[0])), json.loads(b64d(parts[1]))
+    assert header["alg"] == "RS256" and claims["iss"] == sa["client_email"]
+    assert claims["scope"].endswith("cloud-platform")
+    # signature must verify against the public key (raises on tamper)
+    key.public_key().verify(b64d(parts[2]), (parts[0] + "." + parts[1]).encode(),
+                            padding.PKCS1v15(), hashes.SHA256())
+    assert vertex_url("myproj", "us-east5", "claude-sonnet-4-5") == (
+        "https://us-east5-aiplatform.googleapis.com/v1/projects/myproj/locations/us-east5"
+        "/publishers/anthropic/models/claude-sonnet-4-5:rawPredict")

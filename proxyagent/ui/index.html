@@ -144,7 +144,7 @@ function logo(name,color){color=color||"#888";
 function fieldsFor(uid,kind){
   if(kind==="bedrock")return `<div class="row"><input id="f1_${uid}" placeholder="AWS access key id" style="flex:1"/><input id="f3_${uid}" placeholder="region (us-east-1)" style="width:150px"/></div><input id="f2_${uid}" type="password" placeholder="AWS secret access key" style="width:100%;margin-top:8px"/>`;
   if(kind==="azure")return `<input id="f1_${uid}" placeholder="Azure endpoint URL (…/chat/completions?api-version=…)" style="width:100%"/><input id="f2_${uid}" type="password" placeholder="api-key" style="width:100%;margin-top:8px"/>`;
-  if(kind==="vertex")return `<span class="muted" style="font-size:12px">Vertex (service-account JSON) — coming next.</span>`;
+  if(kind==="vertex")return `<textarea id="f1_${uid}" placeholder="Paste the GCP service-account JSON" style="width:100%;min-height:92px;font:12px ui-monospace,monospace;border:none;border-radius:11px;background:var(--panel2);color:var(--txt);padding:10px 12px;outline:none"></textarea><input id="f3_${uid}" placeholder="region (default us-east5)" style="width:100%;margin-top:8px"/>`;
   return `<input id="f1_${uid}" type="password" placeholder="${kind==='oauth'?'OAuth access token':'API key'}" style="width:100%"/>`;
 }
 function onKind(uid){document.getElementById("ff_"+uid).innerHTML=fieldsFor(uid,document.getElementById("kind_"+uid).value)}
@@ -153,7 +153,7 @@ async function submitCred(uid,provider){
   let secret,meta={};
   if(kind==="bedrock"){secret=g("f2_"+uid);meta={access_key:g("f1_"+uid),region:g("f3_"+uid)||"us-east-1"}}
   else if(kind==="azure"){secret=g("f2_"+uid);meta={endpoint:g("f1_"+uid)}}
-  else if(kind==="vertex"){return}
+  else if(kind==="vertex"){secret=g("f1_"+uid);meta={region:g("f3_"+uid)||"us-east5"}}
   else{secret=g("f1_"+uid)}
   if(!secret)return;
   await api("/admin/providers",{method:"POST",body:JSON.stringify({provider,secret,kind,meta})});refreshKeys();
