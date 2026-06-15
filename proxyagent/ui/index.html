@@ -181,14 +181,9 @@ async function renderHarnesses(){
       ${h.configured?'<span class="pill ok">ready</span>':'<span class="pill no">connect a key</span>'}</div>
       <div class="badges">${chips}</div>
       <div class="models mono" style="font-size:11px">${h.install}</div>
-      <div class="row"><button class="sm" onclick="openConnect('h_${h.name}')">Connect API key</button></div>
-      <div class="connect" id="c_h_${h.name}">
-        <input id="k_h_${h.name}" type="password" placeholder="${h.provider} API key"/>
-        <div class="row"><button class="sm" onclick="connectHarness('${h.name}','${h.provider}')">Save</button><button class="ghost sm" onclick="openConnect('h_${h.name}')">Cancel</button></div>
-      </div></div>`}).join("");
+      <div class="row"><button class="sm" onclick="openConnect('h_${h.name}')">+ Connect auth</button></div>
+      <div class="connect" id="c_h_${h.name}">${connectForm('h_'+h.name, h.auth.map(a=>a.mode), h.provider)}</div></div>`}).join("");
 }
-async function connectHarness(name,provider){const key=document.getElementById("k_h_"+name).value.trim();if(!key)return;
-  await api("/admin/providers",{method:"POST",body:JSON.stringify({provider,secret:key,kind:"api_key"})});renderHarnesses();refreshProviders()}
 async function refreshProviders(){
   const d=await(await api("/admin/catalog")).json();const g=document.getElementById("provgrid");
   let connected=0;
@@ -199,18 +194,34 @@ async function refreshProviders(){
       <div class="badges">${p.kinds.map(k=>`<span class="badge">${k}</span>`).join("")}${p.via_env?'<span class="badge on">env</span>':''}</div>
       <div style="display:flex;flex-direction:column;gap:6px;margin:6px 0 11px">${credrows||'<span class="muted" style="font-size:11.5px">No keys yet</span>'}</div>
       <div class="row"><button class="sm" onclick="openConnect('${p.name}')">+ Add credential</button></div>
-      <div class="connect" id="c_${p.name}">
-        ${p.kinds.length>1?`<select id="kind_${p.name}">${p.kinds.map(k=>`<option value="${k}">${k}</option>`).join("")}</select>`:`<input id="kind_${p.name}" type="hidden" value="api_key"/>`}
-        <input id="k_${p.name}" type="password" placeholder="${p.name} key / token"/>
-        <div class="row"><button class="sm" onclick="connect('${p.name}')">Add</button><button class="ghost sm" onclick="openConnect('${p.name}')">Cancel</button></div>
-      </div></div>`}).join("");
+      <div class="connect" id="c_${p.name}">${connectForm(p.name,p.kinds,p.name)}</div></div>`}).join("");
   document.getElementById("s_prov").textContent=connected;
 }
 function openConnect(n){document.getElementById("c_"+n).classList.toggle("open")}
-async function connect(n){const key=document.getElementById("k_"+n).value.trim();if(!key)return;
-  const kindEl=document.getElementById("kind_"+n);const kind=kindEl?kindEl.value:"api_key";
-  await api("/admin/providers",{method:"POST",body:JSON.stringify({provider:n,secret:key,kind})});refreshProviders()}
-async function disconnect(id){await api("/admin/providers/"+id,{method:"DELETE"});refreshProviders()}
+function fieldsFor(uid,kind){
+  if(kind==="bedrock")return `<input id="f1_${uid}" placeholder="AWS access key id"/><input id="f2_${uid}" type="password" placeholder="AWS secret access key"/><input id="f3_${uid}" placeholder="region (default us-east-1)"/>`;
+  if(kind==="azure")return `<input id="f1_${uid}" placeholder="Azure endpoint URL (…/chat/completions?api-version=…)"/><input id="f2_${uid}" type="password" placeholder="api-key"/>`;
+  if(kind==="vertex")return `<span class="muted" style="font-size:12px">Vertex (service-account JSON) — coming next.</span>`;
+  return `<input id="f1_${uid}" type="password" placeholder="${kind==='oauth'?'OAuth access token':'API key'}"/>`;
+}
+function onKind(uid){document.getElementById("ff_"+uid).innerHTML=fieldsFor(uid,document.getElementById("kind_"+uid).value)}
+function connectForm(uid,kinds,provider){
+  return `<select id="kind_${uid}" onchange="onKind('${uid}')">${kinds.map(k=>`<option value="${k}">${k}</option>`).join("")}</select>
+    <div id="ff_${uid}">${fieldsFor(uid,kinds[0])}</div>
+    <div class="row"><button class="sm" onclick="submitCred('${uid}','${provider}')">Add credential</button><button class="ghost sm" onclick="openConnect('${uid}')">Cancel</button></div>`;
+}
+async function submitCred(uid,provider){
+  const kind=document.getElementById("kind_"+uid).value,g=id=>{const e=document.getElementById(id);return e?e.value.trim():""};
+  let secret,meta={};
+  if(kind==="bedrock"){secret=g("f2_"+uid);meta={access_key:g("f1_"+uid),region:g("f3_"+uid)||"us-east-1"}}
+  else if(kind==="azure"){secret=g("f2_"+uid);meta={endpoint:g("f1_"+uid)}}
+  else if(kind==="vertex"){return}
+  else{secret=g("f1_"+uid)}
+  if(!secret)return;
+  await api("/admin/providers",{method:"POST",body:JSON.stringify({provider,secret,kind,meta})});
+  renderHarnesses();refreshProviders();
+}
+async function disconnect(id){await api("/admin/providers/"+id,{method:"DELETE"});renderHarnesses();refreshProviders()}
 
 async function refreshTokens(){const d=await(await api("/admin/tokens")).json();
   document.getElementById("toks").innerHTML=d.tokens.map(t=>`<tr><td class="mono">${t.id}</td><td>${t.label||""}</td><td class="mono">${t.masked||""}</td><td class="mono">${(t.scope||[]).join(", ")}</td><td class="mono">${t.budget_usd?('$'+(t.spent_usd||0).toFixed(4)+' / $'+(+t.budget_usd).toFixed(2)):'—'}</td><td>${t.revoked?'<span class="pill no">revoked</span>':'<span class="pill ok">active</span>'}</td><td>${t.revoked?"":`<button class="danger sm" onclick="revokeTok('${t.id}')">revoke</button>`}</td></tr>`).join("")}

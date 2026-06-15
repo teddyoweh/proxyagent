@@ -202,3 +202,37 @@ def test_credential_pool_and_failover_order():
     assert cands[1]["Authorization"] == "Bearer sk-2"        # failover tries #2 next
     listed = s.list_credentials()
     assert len(listed) == 2 and all("secret" not in c and c["masked"] for c in listed)
+
+
+def test_sigv4_structure_and_determinism():
+    import datetime, re
+    from proxyagent.signers import sigv4_headers
+    now = datetime.datetime(2015, 8, 30, 12, 36, 0, tzinfo=datetime.timezone.utc)
+    kw = dict(method="POST", host="bedrock-runtime.us-east-1.amazonaws.com", path="/model/x/invoke",
+              region="us-east-1", service="bedrock", access_key="AKIDEXAMPLE",
+              secret_key="wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", body=b'{"a":1}', now=now)
+    h1, h2 = sigv4_headers(**kw), sigv4_headers(**kw)
+    assert h1 == h2                                  # deterministic at a fixed time
+    a = h1["Authorization"]
+    assert a.startswith("AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/bedrock/aws4_request")
+    assert "SignedHeaders=content-type;host;x-amz-date" in a
+    assert re.search(r"Signature=[0-9a-f]{64}$", a) and h1["x-amz-date"] == "20150830T123600Z"
+
+
+def test_bedrock_plan_and_build_plans():
+    from proxyagent.signers import bedrock_plan
+    from proxyagent.providers import build_plans
+    url, headers, raw = bedrock_plan(
+        {"secret": "sk", "meta": {"access_key": "AKID", "region": "us-west-2"}},
+        {"model": "claude-sonnet-4-5", "max_tokens": 10, "messages": []})
+    assert url.startswith("https://bedrock-runtime.us-west-2.amazonaws.com/model/") and url.endswith("/invoke")
+    import json
+    b = json.loads(raw)
+    assert b["anthropic_version"] == "bedrock-2023-05-31" and "model" not in b
+    assert headers["Authorization"].startswith("AWS4-HMAC-SHA256")
+    # a provider can mix api_key + bedrock in its pool; both become plans
+    s = Store(":memory:")
+    s.add_credential("anthropic", "sk-1", kind="api_key")
+    s.add_credential("anthropic", "awssecret", kind="bedrock", meta={"access_key": "AKID", "region": "us-east-1"})
+    plans = build_plans(PROVIDERS["anthropic"], s, {"model": "claude-sonnet-4-5", "messages": []})
+    assert len(plans) == 2 and plans[0][0].endswith("/v1/messages") and "bedrock-runtime" in plans[1][0]

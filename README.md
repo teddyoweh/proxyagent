@@ -146,10 +146,18 @@ is to centralise *all* of them so the machine running the harness holds only a `
 | **Codex** | OpenAI | API key · OAuth (ChatGPT) · Azure |
 | **Gemini CLI** | Google | API key · OAuth · Vertex |
 
-Connect each mode once in the dashboard's **Harnesses** tab. API-key mode is wired today;
-Bedrock / Vertex / OAuth-refresh (the cloud-credential paths enterprises actually use) are
-being built out — the proxy holds the AWS/GCP creds and signs upstream, so the machine needs
-none. The model providers below are the *backends* for model-agnostic harnesses (aider, Cline…).
+Connect each mode in the dashboard's **Harnesses** tab (or `proxyagent provider add … --kind`).
+**API key, OAuth, AWS Bedrock, and Azure are wired today** — for Bedrock the proxy holds the AWS
+credentials and **SigV4-signs** the Claude-on-Bedrock request itself, so the machine needs no
+AWS at all. (Vertex lands next.) The model providers below are the *backends* for model-agnostic
+harnesses (aider, Cline…).
+
+```bash
+# the cloud-credential paths — the machine that runs the harness holds none of these:
+proxyagent provider add anthropic --kind bedrock --key <AWS_SECRET>   # + meta: access_key, region
+proxyagent provider add openai    --kind azure   --key <AZURE_KEY>    # + meta: endpoint
+proxyagent provider add anthropic --kind oauth    --key <OAUTH_TOKEN>
+```
 
 ## Credential pools & failover
 A provider isn't one key — it's a **pool**. Add as many credentials as you want, across

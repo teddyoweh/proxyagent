@@ -12,7 +12,7 @@ import json
 
 import httpx
 
-from . import pricing
+from . import pricing, signers
 from .config import Config, PROVIDERS
 from .store import Store, now_ms
 
@@ -45,6 +45,34 @@ def resolve_candidates(provider, store: Store | None) -> list[dict]:
 def resolve_auth(provider, store: Store | None) -> tuple[dict, bool]:
     cands = resolve_candidates(provider, store)
     return (cands[0], True) if cands else ({}, False)
+
+
+def build_plans(provider, store: Store | None, body: dict) -> list[tuple]:
+    """Every way to fulfil this request, in rotation order, as (url, headers, body_bytes).
+    Each credential kind maps to its own upstream + signing: api_key/oauth → the provider
+    endpoint; azure → a custom deployment URL; bedrock → SigV4-signed Claude-on-Bedrock."""
+    plans: list[tuple] = []
+    raw = json.dumps(body).encode("utf-8")
+    JSON = {"content-type": "application/json"}
+    if store:
+        for c in store.get_credentials(provider.name):
+            kind, meta = c["kind"], (c.get("meta") or {})
+            if kind == "api_key":
+                plans.append((provider.endpoint, {**JSON, **_headers_for(provider, c["secret"], "api_key")}, raw))
+            elif kind == "oauth":
+                plans.append((provider.endpoint, {**JSON, "Authorization": f"Bearer {c['secret']}", **provider.extra_headers}, raw))
+            elif kind == "azure":
+                ep = (meta.get("endpoint") or "").rstrip("/")
+                if ep:
+                    plans.append((ep, {**JSON, "api-key": c["secret"]}, raw))
+            elif kind == "bedrock":
+                try:
+                    plans.append(signers.bedrock_plan(c, body))
+                except Exception:  # noqa: BLE001 — skip a malformed bedrock cred
+                    pass
+    if provider.key:
+        plans.append((provider.endpoint, {**JSON, **provider.auth_headers()}, raw))
+    return plans
 
 
 def scope_allows(scope: list[str], provider: str, model: str) -> bool:
@@ -86,14 +114,12 @@ async def forward(
             return 200, {"content-type": "text/event-stream"}, _mock_stream(provider.shape, payload), None
         return 200, {"content-type": "application/json"}, payload, None
 
-    candidates = resolve_candidates(provider, store)
-    if not candidates:
+    plans = build_plans(provider, store, body)
+    if not plans:
         return 502, {}, {"error": f"provider '{provider_name}' not configured on the proxy "
                                   f"(set {provider.key_env} or `proxyagent provider add {provider_name}`)"}, None
 
-    url = provider.endpoint
-
-    def _log(status, ptok, ctok, err=None, attempt=0):
+    def _log(status, ptok, ctok, err=None):
         store.log_request(
             token_id=token["id"], token_label=token.get("label"), provider=provider_name,
             model=model, status=status, prompt_tokens=ptok, completion_tokens=ctok,
@@ -108,12 +134,10 @@ async def forward(
             status = 200
             try:
                 async with httpx.AsyncClient(timeout=config.request_timeout) as client:
-                    for i, auth in enumerate(candidates):
-                        async with client.stream(
-                            "POST", url, headers={"content-type": "application/json", **auth}, json=body
-                        ) as resp:
+                    for i, (url, headers, raw) in enumerate(plans):
+                        async with client.stream("POST", url, headers=headers, content=raw) as resp:
                             status = resp.status_code
-                            if status in FAILOVER_STATUS and i < len(candidates) - 1:
+                            if status in FAILOVER_STATUS and i < len(plans) - 1:
                                 await resp.aread()  # drain + rotate to the next credential
                                 continue
                             async for chunk in resp.aiter_raw():
@@ -134,12 +158,12 @@ async def forward(
                 _log(status, ptok, ctok)
         return 200, {"content-type": "text/event-stream"}, _gen(), None
 
-    # Non-streaming, with credential failover.
+    # Non-streaming, with credential failover across the pool.
     last_status, last_payload = 502, {"error": "all credentials failed"}
     async with httpx.AsyncClient(timeout=config.request_timeout) as client:
-        for i, auth in enumerate(candidates):
-            resp = await client.post(url, headers={"content-type": "application/json", **auth}, json=body)
-            if resp.status_code in FAILOVER_STATUS and i < len(candidates) - 1:
+        for i, (url, headers, raw) in enumerate(plans):
+            resp = await client.post(url, headers=headers, content=raw)
+            if resp.status_code in FAILOVER_STATUS and i < len(plans) - 1:
                 last_status = resp.status_code
                 continue
             try:

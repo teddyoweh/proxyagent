@@ -35,9 +35,10 @@ class TokenBody(BaseModel):
 class ProviderBody(BaseModel):
     provider: str
     secret: str
-    kind: str = "api_key"            # api_key | oauth
+    kind: str = "api_key"            # api_key | oauth | bedrock | azure | vertex
     label: str | None = None
     refresh: str | None = None
+    meta: dict | None = None         # bedrock: {access_key, region}; azure: {endpoint}
 
 
 def create_app(config: Config | None = None) -> FastAPI:
@@ -204,7 +205,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         if body.provider not in PROVIDERS:
             raise HTTPException(400, f"unknown provider; known: {list(PROVIDERS)}")
         cid = store.add_credential(body.provider, body.secret, kind=body.kind,
-                                   label=body.label, refresh=body.refresh)
+                                   label=body.label, refresh=body.refresh, meta=body.meta)
         return {"id": cid, "provider": body.provider, "kind": body.kind,
                 "stored": "encrypted" if crypto.encryption_available() else "plaintext"}
 
@@ -227,19 +228,28 @@ def create_app(config: Config | None = None) -> FastAPI:
     async def harnesses(authorization: str | None = Header(None),
                         x_admin_token: str | None = Header(None)):
         require_admin(authorization, x_admin_token)
-        stored = {c["provider"] for c in store.list_credentials() if c["active"]}
+        kinds_by_prov: dict[str, set] = {}
+        for c in store.list_credentials():
+            if c["active"]:
+                kinds_by_prov.setdefault(c["provider"], set()).add(c["kind"])
         out = []
         for name, h in HARNESSES.items():
             prov = PROVIDERS.get(h["provider"])
-            configured = bool(prov and prov.key) or h["provider"] in stored
+            have = kinds_by_prov.get(h["provider"], set())
+            env_key = bool(prov and prov.key)
+
+            def _conn(m):
+                if m == "api_key":
+                    return env_key or "api_key" in have
+                return m in have
+
             out.append({
                 "name": name, "label": h["label"], "provider": h["provider"],
                 "color": h["color"], "install": h["install"],
                 "auth": [{"mode": m, "label": AUTH_LABELS.get(m, m),
-                          "ready": m in AUTH_READY,
-                          "connected": m == "api_key" and configured}
+                          "ready": m in AUTH_READY, "connected": _conn(m)}
                          for m in h["auth"]],
-                "configured": configured,
+                "configured": env_key or bool(have),
             })
         return {"harnesses": out}
 

@@ -101,7 +101,7 @@ AUTH_LABELS = {"api_key": "API key", "oauth": "OAuth", "bedrock": "AWS Bedrock",
                "vertex": "Google Vertex", "azure": "Azure"}
 # Auth modes that are fully wired today (just a key swap). Others are surfaced in the
 # UI as "available" and built out (Bedrock SigV4 / Vertex token / OAuth refresh).
-AUTH_READY = {"api_key"}
+AUTH_READY = {"api_key", "oauth", "bedrock", "azure"}
 
 
 @dataclass
