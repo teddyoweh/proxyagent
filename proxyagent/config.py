@@ -18,9 +18,10 @@ HOME = Path(os.environ.get("PROXYAGENT_HOME", Path.home() / ".proxyagent"))
 @dataclass
 class Provider:
     name: str
-    base_url: str          # upstream API root
+    endpoint: str          # full upstream URL (e.g. …/v1/chat/completions)
     key_env: str           # env var holding the REAL key
-    auth_style: str        # "bearer" (OpenAI) | "x-api-key" (Anthropic)
+    auth_style: str        # "bearer" | "x-api-key"
+    shape: str             # "openai" | "anthropic" (request + usage format)
     extra_headers: dict = field(default_factory=dict)
 
     @property
@@ -36,18 +37,25 @@ class Provider:
         return {"Authorization": f"Bearer {key}", **self.extra_headers}
 
 
-# Built-in upstreams. base_url overridable via env (e.g. Azure, self-hosted, gateways).
-def _provider(name, default_base, key_env, style, extra=None) -> Provider:
-    base = os.environ.get(f"PROXYAGENT_{name.upper()}_BASE_URL", default_base)
-    return Provider(name, base.rstrip("/"), key_env, style, extra or {})
+def _p(name, endpoint, key_env, *, shape="openai", style="bearer", extra=None) -> Provider:
+    endpoint = os.environ.get(f"PROXYAGENT_{name.upper()}_ENDPOINT", endpoint)
+    return Provider(name, endpoint, key_env, style, shape, extra or {})
 
 
+# Built-in upstreams. Anthropic uses its Messages API; the rest are OpenAI-compatible.
+# Add your own / override endpoints via PROXYAGENT_<NAME>_ENDPOINT.
 PROVIDERS: dict[str, Provider] = {
-    "anthropic": _provider(
-        "anthropic", "https://api.anthropic.com", "ANTHROPIC_API_KEY", "x-api-key",
-        {"anthropic-version": os.environ.get("ANTHROPIC_VERSION", "2023-06-01")},
-    ),
-    "openai": _provider("openai", "https://api.openai.com", "OPENAI_API_KEY", "bearer"),
+    "anthropic":  _p("anthropic", "https://api.anthropic.com/v1/messages", "ANTHROPIC_API_KEY",
+                     shape="anthropic", style="x-api-key",
+                     extra={"anthropic-version": os.environ.get("ANTHROPIC_VERSION", "2023-06-01")}),
+    "openai":     _p("openai", "https://api.openai.com/v1/chat/completions", "OPENAI_API_KEY"),
+    "gemini":     _p("gemini", "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "GEMINI_API_KEY"),
+    "groq":       _p("groq", "https://api.groq.com/openai/v1/chat/completions", "GROQ_API_KEY"),
+    "openrouter": _p("openrouter", "https://openrouter.ai/api/v1/chat/completions", "OPENROUTER_API_KEY"),
+    "mistral":    _p("mistral", "https://api.mistral.ai/v1/chat/completions", "MISTRAL_API_KEY"),
+    "deepseek":   _p("deepseek", "https://api.deepseek.com/v1/chat/completions", "DEEPSEEK_API_KEY"),
+    "xai":        _p("xai", "https://api.x.ai/v1/chat/completions", "XAI_API_KEY"),
+    "together":   _p("together", "https://api.together.xyz/v1/chat/completions", "TOGETHER_API_KEY"),
 }
 
 

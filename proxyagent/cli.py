@@ -70,6 +70,46 @@ token_app = typer.Typer(help="Mint / list / revoke machine tokens.")
 app.add_typer(token_app, name="token")
 provider_app = typer.Typer(help="Add / list / remove provider credentials (stored, encrypted).")
 app.add_typer(provider_app, name="provider")
+alias_app = typer.Typer(help="Model remap — rename or reroute models (e.g. force everything to mock).")
+app.add_typer(alias_app, name="alias")
+
+
+@alias_app.command("ls")
+def alias_ls(proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
+             admin: str = typer.Option(None, "--admin")):
+    """Show the current model map."""
+    with _admin_client(proxy, admin) as c:
+        m = c.get("/admin/aliases").json()["map"]
+    if not m:
+        console.print("[dim]No aliases. e.g. `proxyagent alias set '*' mock`[/dim]"); return
+    t = Table(title="Model aliases")
+    t.add_column("Match"); t.add_column("→ Target")
+    for k, v in m.items():
+        t.add_row(k, v)
+    console.print(t)
+
+
+@alias_app.command("set")
+def alias_set(match: str, target: str,
+              proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
+              admin: str = typer.Option(None, "--admin")):
+    """Map a model → a model (rename) or 'provider:model' (reroute). Use '*' to catch all."""
+    with _admin_client(proxy, admin) as c:
+        m = c.get("/admin/aliases").json()["map"]
+        m[match] = target
+        c.put("/admin/aliases", json={"map": m})
+    console.print(f"[green]✓[/green] [cyan]{match}[/cyan] → {target}")
+
+
+@alias_app.command("rm")
+def alias_rm(match: str, proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
+             admin: str = typer.Option(None, "--admin")):
+    """Remove an alias."""
+    with _admin_client(proxy, admin) as c:
+        m = c.get("/admin/aliases").json()["map"]
+        m.pop(match, None)
+        c.put("/admin/aliases", json={"map": m})
+    console.print(f"[green]✓[/green] removed {match}")
 
 
 @provider_app.command("add")

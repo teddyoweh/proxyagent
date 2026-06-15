@@ -5,9 +5,18 @@ import os
 os.environ.setdefault("PROXYAGENT_HOME", "/tmp/proxyagent_test_home")
 os.environ["PROXYAGENT_ADMIN_TOKEN"] = "pa_admin_test"
 
+import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from proxyagent.config import Config  # noqa: E402
+from proxyagent import aliases as _aliases  # noqa: E402
+from proxyagent.config import Config, PROVIDERS  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _reset_aliases():
+    _aliases.set_map({})
+    yield
+    _aliases.set_map({})
 from proxyagent.providers import scope_allows  # noqa: E402
 from proxyagent.security import hash_token, token_matches, new_token  # noqa: E402
 from proxyagent.server import create_app  # noqa: E402
@@ -126,3 +135,33 @@ def test_provider_admin_endpoints():
     # unknown provider rejected
     assert c.post("/admin/providers", headers=ADMIN,
                   json={"provider": "nope", "secret": "x"}).status_code == 400
+
+
+def test_more_providers_route():
+    # new providers are routable; mock works on any of them with no key
+    assert "groq" in PROVIDERS and "gemini" in PROVIDERS and "openrouter" in PROVIDERS
+    c = _client()
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    r = c.post("/groq/v1/chat/completions", headers={"authorization": f"Bearer {tok}"},
+               json={"model": "mock", "messages": [{"role": "user", "content": "hi"}]})
+    assert r.status_code == 200 and r.json()["choices"][0]["message"]["content"].startswith("[proxyagent mock]")
+    # unknown provider → 404
+    assert c.post("/nope/v1/chat/completions", headers={"authorization": f"Bearer {tok}"},
+                  json={"model": "mock", "messages": []}).status_code == 404
+
+
+def test_model_remap_forces_mock_offline():
+    c = _client()
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    # map everything to mock → a "real" model call runs offline, no key
+    c.put("/admin/aliases", headers=ADMIN, json={"map": {"*": "mock"}})
+    r = c.post("/openai/v1/chat/completions", headers={"authorization": f"Bearer {tok}"},
+               json={"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}]})
+    assert r.status_code == 200 and "[proxyagent mock]" in r.json()["choices"][0]["message"]["content"]
+
+
+def test_model_remap_reroutes_provider():
+    from proxyagent.aliases import remap
+    _aliases.set_map({"gpt-4o": "anthropic:mock"})
+    assert remap("openai", "gpt-4o") == ("anthropic", "mock")
+    assert remap("openai", "gpt-4o-mini") == ("openai", "gpt-4o-mini")  # no match

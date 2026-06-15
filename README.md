@@ -130,6 +130,26 @@ proxyagent.run("claude-code", goal="build the app",
                proxy="https://proxy.you.com", token=token)
 ```
 
+## Supported providers
+`anthropic` · `openai` · `gemini` · `groq` · `openrouter` · `mistral` · `deepseek` ·
+`xai` · `together` — Anthropic uses its Messages API; the rest are OpenAI-compatible.
+Point a harness/agent at `https://proxy.you.com/<provider>/v1` and it routes there.
+Add or override any endpoint with `PROXYAGENT_<NAME>_ENDPOINT`.
+
+## Model remap — rename or reroute models
+Rewrite the requested model before forwarding — rename it, or reroute it to a totally
+different provider:
+
+```bash
+proxyagent alias set gpt-4o anthropic:claude-sonnet-4-5   # send "gpt-4o" calls to Claude
+proxyagent alias set '*' mock                             # force EVERYTHING offline (no keys)
+proxyagent alias ls
+```
+
+The `'*' → mock` trick is the **offline harness** unlock: point `claude-code` at the
+proxy, map everything to `mock`, and it runs end-to-end with zero keys and zero spend —
+perfect for local dev, demos, and CI.
+
 ## Supported harnesses
 `claude-code`, `codex`, and any **custom** command (`--command "my-agent {goal}"`). Adding one
 is a few lines — it just needs to respect `*_BASE_URL`.

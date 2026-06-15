@@ -14,9 +14,9 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from . import crypto
+from . import aliases, crypto
 from .config import Config, PROVIDERS
-from .providers import ROUTES, forward, scope_allows
+from .providers import forward, scope_allows
 from .security import token_matches
 from .store import Store, now_ms
 from .tools import ToolRegistry
@@ -83,38 +83,44 @@ def create_app(config: Config | None = None) -> FastAPI:
     # ------------------------------------------------------------------ #
     # Provider proxy endpoints
     # ------------------------------------------------------------------ #
-    async def _proxy(provider_key: str, request: Request, authorization, x_api_key):
+    async def _proxy(provider: str, request: Request, authorization, x_api_key):
         token = auth_machine(authorization, x_api_key)
-        provider_name, upstream_path = ROUTES[provider_key]
+        if provider not in PROVIDERS:
+            raise HTTPException(404, f"unknown provider '{provider}' (known: {list(PROVIDERS)})")
         body = await request.json()
-        model = body.get("model", "")
+        # model remap — may rename the model and/or reroute to another provider
+        provider, model = aliases.remap(provider, body.get("model", ""))
+        if provider not in PROVIDERS:
+            raise HTTPException(400, f"alias target provider '{provider}' is unknown")
+        body["model"] = model
         scope = _json.loads(token["scope_json"])
-        if not scope_allows(scope, provider_name, model):
-            raise HTTPException(403, f"token scope does not allow {provider_name}:{model}")
+        if not scope_allows(scope, provider, model):
+            raise HTTPException(403, f"token scope does not allow {provider}:{model}")
 
         used_tools: list[str] = []
         if request.headers.get("x-proxyagent-tools", "").lower() in ("1", "on", "true"):
-            body = tools.inject(body, provider_name)
+            body = tools.inject(body, PROVIDERS[provider].shape)
             used_tools = tools.names()
 
         streaming = bool(body.get("stream"))
         status, headers, payload, _ = await forward(
-            config, provider_name, upstream_path, body,
-            streaming=streaming, token=token, store=store, tools_used=used_tools,
-        )
+            config, provider, body, streaming=streaming, token=token, store=store,
+            tools_used=used_tools)
         if streaming:
             return StreamingResponse(payload, media_type="text/event-stream")
         return JSONResponse(payload, status_code=status)
 
-    @app.post("/anthropic/v1/messages")
-    async def anthropic(request: Request, authorization: str | None = Header(None),
-                        x_api_key: str | None = Header(None)):
-        return await _proxy("anthropic", request, authorization, x_api_key)
+    # OpenAI-compatible providers hit /<provider>/v1/chat/completions; Anthropic-style
+    # hit /<provider>/v1/messages. The provider segment selects the upstream.
+    @app.post("/{provider}/v1/chat/completions")
+    async def chat(provider: str, request: Request, authorization: str | None = Header(None),
+                   x_api_key: str | None = Header(None)):
+        return await _proxy(provider, request, authorization, x_api_key)
 
-    @app.post("/openai/v1/chat/completions")
-    async def openai(request: Request, authorization: str | None = Header(None),
-                     x_api_key: str | None = Header(None)):
-        return await _proxy("openai", request, authorization, x_api_key)
+    @app.post("/{provider}/v1/messages")
+    async def messages(provider: str, request: Request, authorization: str | None = Header(None),
+                       x_api_key: str | None = Header(None)):
+        return await _proxy(provider, request, authorization, x_api_key)
 
     # ------------------------------------------------------------------ #
     # Tools — execute a proxied tool (creds stay here)
@@ -212,10 +218,26 @@ def create_app(config: Config | None = None) -> FastAPI:
             raise HTTPException(404, "no such credential")
         return {"ok": True}
 
+    # -- model aliases / remap -------------------------------------------- #
+    @app.get("/admin/aliases")
+    async def get_aliases(authorization: str | None = Header(None),
+                          x_admin_token: str | None = Header(None)):
+        require_admin(authorization, x_admin_token)
+        return {"map": aliases.get_map()}
+
+    @app.put("/admin/aliases")
+    async def set_aliases(request: Request, authorization: str | None = Header(None),
+                          x_admin_token: str | None = Header(None)):
+        require_admin(authorization, x_admin_token)
+        body = await request.json()
+        aliases.set_map(body.get("map", body))
+        return {"map": aliases.get_map()}
+
     @app.get("/healthz")
     async def healthz():
-        return {"ok": True, "providers": _configured(), "tools": tools.names(),
-                "backend": store.backend}
+        return {"ok": True, "providers": _configured(), "available": sorted(PROVIDERS),
+                "tools": tools.names(), "backend": store.backend,
+                "aliases": len(aliases.get_map())}
 
     # ------------------------------------------------------------------ #
     # Dashboard

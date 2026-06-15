@@ -16,13 +16,6 @@ from . import pricing
 from .config import Config, PROVIDERS
 from .store import Store, now_ms
 
-# Map our public path → (provider, upstream path).
-ROUTES = {
-    "anthropic": ("anthropic", "/v1/messages"),
-    "openai": ("openai", "/v1/chat/completions"),
-}
-
-
 def resolve_auth(provider, store: Store | None) -> tuple[dict, bool]:
     """Auth headers for an upstream call. A stored credential (proxy_agent_keys) wins
     over the env key; returns ({}, False) when nothing is configured."""
@@ -55,7 +48,7 @@ def _extract_usage(provider: str, payload: dict) -> tuple[int | None, int | None
 
 
 async def forward(
-    config: Config, provider_name: str, upstream_path: str, body: dict,
+    config: Config, provider_name: str, body: dict,
     *, streaming: bool, token: dict, store: Store, tools_used: list[str] | None = None,
 ):
     """Forward a request upstream. Returns (status, headers, body_iter_or_dict, log_after)."""
@@ -66,7 +59,7 @@ async def forward(
     # Offline mock — exercise the full pipeline (auth, scope, log, cost) with NO real
     # key. Use model "mock" (or "mock-…") anywhere a real model would go.
     if model.startswith("mock"):
-        payload, (ptok, ctok) = _mock_payload(provider_name, body)
+        payload, (ptok, ctok) = _mock_payload(provider.shape, body)
         store.log_request(
             token_id=token["id"], token_label=token.get("label"), provider=provider_name,
             model=model, status=200, prompt_tokens=ptok, completion_tokens=ctok,
@@ -74,7 +67,7 @@ async def forward(
             tools_used=json.dumps(tools_used or []), cost_usd=pricing.cost_usd(model, ptok, ctok),
             error=None)
         if streaming:
-            return 200, {"content-type": "text/event-stream"}, _mock_stream(provider_name, payload), None
+            return 200, {"content-type": "text/event-stream"}, _mock_stream(provider.shape, payload), None
         return 200, {"content-type": "application/json"}, payload, None
 
     auth, ok = resolve_auth(provider, store)
@@ -82,7 +75,7 @@ async def forward(
         return 502, {}, {"error": f"provider '{provider_name}' not configured on the proxy "
                                   f"(set {provider.key_env} or `proxyagent provider add {provider_name}`)"}, None
 
-    url = provider.base_url + upstream_path
+    url = provider.endpoint
     headers = {"content-type": "application/json", **auth}
 
     def _log(status, ptok, ctok, err=None):
@@ -127,7 +120,7 @@ async def forward(
         payload = resp.json()
     except Exception:
         payload = {"error": resp.text}
-    ptok, ctok = _extract_usage(provider_name, payload if isinstance(payload, dict) else {})
+    ptok, ctok = _extract_usage(provider.shape, payload if isinstance(payload, dict) else {})
     _log(resp.status_code, ptok, ctok, None if resp.is_success else str(payload)[:300])
     return resp.status_code, {"content-type": "application/json"}, payload, None
 
