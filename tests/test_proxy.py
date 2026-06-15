@@ -98,6 +98,25 @@ def test_credential_storage_and_resolution():
     assert s.remove_credential(cid)
 
 
+def test_mock_provider_offline():
+    """Full pipeline with no real key: mint → call model 'mock' → response + usage + log."""
+    c = _client()
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"label": "m", "scope": ["*"]}).json()["token"]
+    r = c.post("/anthropic/v1/messages", headers={"x-api-key": tok},
+               json={"model": "mock", "max_tokens": 50, "messages": [{"role": "user", "content": "hello"}]})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["content"][0]["text"].startswith("[proxyagent mock]")
+    assert body["usage"]["input_tokens"] >= 1
+    # it was logged (with $0 cost)
+    logs = c.get("/admin/logs", headers=ADMIN).json()["logs"]
+    assert logs[0]["model"] == "mock" and logs[0]["status"] == 200
+    # openai shape too
+    r2 = c.post("/openai/v1/chat/completions", headers={"authorization": f"Bearer {tok}"},
+                json={"model": "mock", "messages": [{"role": "user", "content": "hi"}]})
+    assert r2.json()["choices"][0]["message"]["content"].startswith("[proxyagent mock]")
+
+
 def test_provider_admin_endpoints():
     c = _client()
     r = c.post("/admin/providers", headers=ADMIN, json={"provider": "anthropic", "secret": "sk-ant-x"})

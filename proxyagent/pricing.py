@@ -27,6 +27,8 @@ DEFAULT_PRICES: dict[str, tuple[float, float]] = {
     "o3-mini": (1.10, 4.40),
     "o3": (2.0, 8.0),
     "gpt-5": (1.25, 10.0),
+    # offline test provider — free
+    "mock": (0.0, 0.0),
 }
 
 

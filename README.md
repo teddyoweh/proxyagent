@@ -29,6 +29,15 @@ proxy and use the **machine token** as the "api key." The proxy authenticates th
 checks its scope, **swaps in the real key**, forwards upstream, and logs the call. The
 machine never sees a real credential.
 
+## Try it with zero keys (local)
+```bash
+pip install proxyagent && proxyagent serve        # prints an admin token
+proxyagent token new local --admin pa_admin_…     # mint a token
+# call the built-in `mock` model — full pipeline (auth, scope, usage, cost, log), no real key:
+curl -s localhost:8080/anthropic/v1/messages -H "x-api-key: pa_…" \
+  -d '{"model":"mock","max_tokens":50,"messages":[{"role":"user","content":"hi"}]}'
+```
+
 ## Quickstart
 
 **1. Run the proxy** (on a box you control — it holds the real keys):
