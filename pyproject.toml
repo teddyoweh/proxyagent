@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "proxyagent"
+version = "0.1.0"
+description = "Run any agent (Claude, Codex, custom) on any machine — with no API key on the machine. A secure, self-hosted proxy for models and tools."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+authors = [{ name = "Spawn Labs", email = "teddy@spawnlabs.ai" }]
+keywords = ["llm", "proxy", "gateway", "agents", "claude", "codex", "tools", "security"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Security",
+]
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "httpx>=0.27",
+    "typer>=0.12",
+    "rich>=13.0",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+proxyagent = "proxyagent.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/teddyoweh/proxyagent"
+
+[tool.hatch.build.targets.wheel]
+packages = ["proxyagent"]
+artifacts = ["proxyagent/ui/**/*"]

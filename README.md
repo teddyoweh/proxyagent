@@ -1,0 +1,104 @@
+<div align="center">
+
+# proxyagent
+
+**Run any agent — Claude, Codex, custom — on any machine, with _no API key on the machine._**
+
+A secure, self-hosted proxy for models **and** tools. Your keys live in one hardened place; every machine holds only a scoped, revocable token.
+
+</div>
+
+---
+
+Agents need model access (and tool access) to do anything. Today that means scattering
+real API keys across every machine an agent runs on — a security nightmare. `proxyagent`
+fixes it: stand up **one** proxy that holds the real credentials, and point every agent at
+it. The machine gets a throwaway token; the real key never leaves the proxy.
+
+```
+   remote machine                     proxy (you host)            upstream
+ ┌────────────────┐  token only   ┌──────────────────┐  real key  ┌───────────┐
+ │ claude / codex │ ───────────►  │  proxyagent serve │ ─────────► │ Anthropic │
+ │  (no real key) │ ◄───────────  │  scope·log·tools  │ ◄───────── │  OpenAI   │
+ └────────────────┘   stream      └──────────────────┘            └───────────┘
+```
+
+## How it works
+Every harness honours `*_BASE_URL`, so the shim is trivial: point the base URL at the
+proxy and use the **machine token** as the "api key." The proxy authenticates the token,
+checks its scope, **swaps in the real key**, forwards upstream, and logs the call. The
+machine never sees a real credential.
+
+## Quickstart
+
+**1. Run the proxy** (on a box you control — it holds the real keys):
+```bash
+pip install proxyagent
+export ANTHROPIC_API_KEY=sk-ant-…      # and/or OPENAI_API_KEY=sk-…
+proxyagent serve                        # prints an admin token + a dashboard at :8080
+```
+
+**2. Mint a machine token** (scoped + revocable):
+```bash
+proxyagent token new macbook-01 --scope "anthropic:claude-*" --admin pa_admin_…
+```
+
+**3. Run any agent on any machine — no real key there:**
+```bash
+PROXYAGENT_TOKEN=pa_… proxyagent run claude-code \
+  --goal "build a SwiftUI todo app" --proxy https://proxy.you.com
+# or:  proxyagent run codex --goal "fix the failing tests" --token pa_…
+```
+
+Or use any harness directly — just set the env and the proxy does the rest:
+```bash
+export ANTHROPIC_BASE_URL=https://proxy.you.com/anthropic
+export ANTHROPIC_API_KEY=pa_…          # the machine token, not the real key
+claude -p "ship it"
+```
+
+## The dashboard
+`proxyagent serve` ships a dashboard at `/` — mint/revoke tokens, watch live usage and a
+full request audit log, see configured providers + proxied tools. Paste the admin token to
+open it.
+
+## Proxied tools — the same trick, for tools
+The proxy can also hold your **tool** keys and hand agents governed tools — so an agent gets
+web search (and custom tools) without ever holding the tool's credential.
+
+```bash
+export TAVILY_API_KEY=tvly-…                                   # web_search uses this; agents never see it
+export PROXYAGENT_TOOLS='[{"name":"crm","url":"https://hooks.you.com/crm","headers":{"Authorization":"Bearer …"}}]'
+# then send requests with header  x-proxyagent-tools: on  → tool defs are injected;
+# the proxy executes calls to managed tools server-side (keys stay here).
+```
+
+## Security model
+- **Real keys never leave the proxy** — read from env, never persisted, never logged, never returned.
+- **Machine tokens are stored hashed** (SHA-256); plaintext shown once. A stolen DB yields nothing usable.
+- **Scoped** (`provider:model` globs), **expiring** (TTL), **revocable**, **rate-limited**.
+- **Constant-time** token comparison; sensitive headers redacted from logs.
+- Admin API + dashboard gated by a separate admin token. Run it behind TLS.
+
+## SDK
+```python
+import proxyagent
+
+# host the proxy (embed in your own service):
+app = proxyagent.create_app()              # ASGI app
+
+# mint tokens programmatically:
+admin = proxyagent.Admin("https://proxy.you.com", "pa_admin_…")
+token = admin.mint("ci-runner", scope=["anthropic:claude-*"], ttl_seconds=3600)
+
+# run a harness on this machine, no key here:
+proxyagent.run("claude-code", goal="build the app",
+               proxy="https://proxy.you.com", token=token)
+```
+
+## Supported harnesses
+`claude-code`, `codex`, and any **custom** command (`--command "my-agent {goal}"`). Adding one
+is a few lines — it just needs to respect `*_BASE_URL`.
+
+## License
+Apache-2.0

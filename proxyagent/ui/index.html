@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>proxyagent</title>
+<style>
+  :root { --bg:#0b0c0e; --panel:#15171a; --line:#23262b; --txt:#e7e9ec; --dim:#8a9099; --grn:#34d39e; --red:#f87171; --yel:#fbbf24; }
+  * { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--txt); font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto; }
+  a { color:var(--grn); } code,.mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  header { display:flex; align-items:center; justify-content:space-between; padding:18px 28px; border-bottom:1px solid var(--line); }
+  .brand { display:flex; align-items:center; gap:10px; font-weight:600; font-size:16px; }
+  .dot { width:9px; height:9px; border-radius:50%; background:var(--grn); box-shadow:0 0 10px 1px rgba(52,211,158,.5); }
+  main { max-width:1100px; margin:0 auto; padding:28px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:26px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px; }
+  .stat .n { font-size:30px; font-weight:600; } .stat .l { color:var(--dim); font-size:11px; text-transform:uppercase; letter-spacing:.08em; margin-top:4px; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); margin:26px 0 12px; }
+  table { width:100%; border-collapse:collapse; } th,td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); font-size:13px; }
+  th { color:var(--dim); font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:.06em; }
+  input,button,select { font:inherit; border-radius:9px; border:1px solid var(--line); background:#0e1013; color:var(--txt); padding:8px 11px; }
+  button { background:var(--grn); color:#04130d; border:none; font-weight:600; cursor:pointer; } button.ghost { background:transparent; color:var(--dim); border:1px solid var(--line); }
+  button:hover { filter:brightness(1.08); } .row { display:flex; gap:9px; flex-wrap:wrap; align-items:center; }
+  .pill { padding:2px 9px; border-radius:99px; font-size:11px; } .pill.ok { background:rgba(52,211,158,.12); color:var(--grn); } .pill.no { background:rgba(248,113,113,.12); color:var(--red); }
+  .gate { max-width:420px; margin:90px auto; text-align:center; } .gate input { width:100%; margin:14px 0; }
+  .tok { background:#0e1013; border:1px dashed var(--grn); padding:12px; border-radius:10px; word-break:break-all; margin-top:12px; }
+  .hide { display:none; }
+</style>
+</head>
+<body>
+<div id="gate" class="gate">
+  <div class="brand" style="justify-content:center"><span class="dot"></span> proxyagent</div>
+  <p style="color:var(--dim)">Paste your admin token (printed by <code>proxyagent serve</code>).</p>
+  <input id="admintok" type="password" placeholder="pa_admin_…" />
+  <button onclick="saveAdmin()">Open dashboard</button>
+  <p id="gateerr" style="color:var(--red)"></p>
+</div>
+
+<div id="app" class="hide">
+  <header>
+    <div class="brand"><span class="dot"></span> proxyagent</div>
+    <div class="row"><span id="provs" style="color:var(--dim)"></span><button class="ghost" onclick="logout()">Sign out</button></div>
+  </header>
+  <main>
+    <div class="grid">
+      <div class="card stat"><div class="n" id="s_req">0</div><div class="l">Requests</div></div>
+      <div class="card stat"><div class="n" id="s_in">0</div><div class="l">Input tokens</div></div>
+      <div class="card stat"><div class="n" id="s_out">0</div><div class="l">Output tokens</div></div>
+      <div class="card stat"><div class="n" id="s_tools">0</div><div class="l">Proxied tools</div></div>
+    </div>
+
+    <h2>Mint a machine token</h2>
+    <div class="card">
+      <div class="row">
+        <input id="t_label" placeholder="label (e.g. macbook-01)" />
+        <input id="t_scope" placeholder="scope: * or anthropic:claude-*" style="flex:1" />
+        <input id="t_ttl" type="number" placeholder="ttl (s)" style="width:110px" />
+        <button onclick="mint()">Mint token</button>
+      </div>
+      <div id="minted" class="tok hide"></div>
+      <p style="color:var(--dim);margin:10px 0 0">The machine holds only this token — never a real key. Revoke anytime.</p>
+    </div>
+
+    <h2>Machine tokens</h2>
+    <div class="card"><table><thead><tr><th>ID</th><th>Label</th><th>Token</th><th>Scope</th><th>Status</th><th></th></tr></thead><tbody id="toks"></tbody></table></div>
+
+    <h2>Recent requests <span style="color:var(--dim);font-weight:400;text-transform:none;letter-spacing:0">· live</span></h2>
+    <div class="card"><table><thead><tr><th>Time</th><th>Token</th><th>Provider</th><th>Model</th><th>Status</th><th>In</th><th>Out</th><th>ms</th></tr></thead><tbody id="logs"></tbody></table></div>
+  </main>
+</div>
+
+<script>
+const A = () => localStorage.getItem("pa_admin");
+const H = () => ({ "x-admin-token": A(), "content-type": "application/json" });
+async function api(path, opts={}) { const r = await fetch(path, { ...opts, headers: { ...H(), ...(opts.headers||{}) } }); if (r.status===401) { logout(); throw new Error("unauthorized"); } return r; }
+
+function saveAdmin() { const v = document.getElementById("admintok").value.trim(); if (!v) return; localStorage.setItem("pa_admin", v); boot(); }
+function logout() { localStorage.removeItem("pa_admin"); document.getElementById("app").classList.add("hide"); document.getElementById("gate").classList.remove("hide"); }
+
+async function boot() {
+  try {
+    const u = await (await api("/admin/usage")).json();
+    document.getElementById("gate").classList.add("hide");
+    document.getElementById("app").classList.remove("hide");
+    document.getElementById("s_req").textContent = u.usage.requests;
+    document.getElementById("s_in").textContent = u.usage.prompt_tokens;
+    document.getElementById("s_out").textContent = u.usage.completion_tokens;
+    document.getElementById("s_tools").textContent = (u.tools||[]).length;
+    document.getElementById("provs").textContent = "providers: " + ((u.providers||[]).join(", ") || "none");
+    refreshTokens(); refreshLogs();
+  } catch (e) { document.getElementById("gateerr").textContent = "Invalid admin token."; }
+}
+
+async function refreshTokens() {
+  const d = await (await api("/admin/tokens")).json();
+  document.getElementById("toks").innerHTML = d.tokens.map(t => `
+    <tr><td class="mono">${t.id}</td><td>${t.label||""}</td><td class="mono">${t.masked||""}</td>
+    <td class="mono">${(t.scope||[]).join(", ")}</td>
+    <td>${t.revoked?'<span class="pill no">revoked</span>':'<span class="pill ok">active</span>'}</td>
+    <td>${t.revoked?"":`<button class="ghost" onclick="revoke('${t.id}')">revoke</button>`}</td></tr>`).join("");
+}
+async function refreshLogs() {
+  const d = await (await api("/admin/logs?limit=60")).json();
+  document.getElementById("logs").innerHTML = d.logs.map(g => `
+    <tr><td class="mono">${new Date(g.ts_ms).toLocaleTimeString()}</td><td>${g.token_label||""}</td>
+    <td>${g.provider||""}</td><td class="mono">${(g.model||"").slice(0,26)}</td>
+    <td>${g.status||""}</td><td>${g.prompt_tokens??"-"}</td><td>${g.completion_tokens??"-"}</td><td>${g.latency_ms||""}</td></tr>`).join("");
+}
+async function mint() {
+  const body = { label: val("t_label")||"machine", scope: (val("t_scope")||"*").split(",").map(s=>s.trim()), ttl_seconds: parseInt(val("t_ttl"))||null };
+  const d = await (await api("/admin/tokens", { method:"POST", body: JSON.stringify(body) })).json();
+  const el = document.getElementById("minted"); el.classList.remove("hide");
+  el.innerHTML = `<b>Token (shown once):</b><br/><span class="mono">${d.token}</span>`;
+  refreshTokens(); boot();
+}
+async function revoke(id) { await api("/admin/tokens/"+id, { method:"DELETE" }); refreshTokens(); }
+function val(id){ return document.getElementById(id).value.trim(); }
+
+if (A()) boot();
+setInterval(() => { if (A() && !document.getElementById("app").classList.contains("hide")) { refreshLogs(); } }, 4000);
+</script>
+</body>
+</html>
