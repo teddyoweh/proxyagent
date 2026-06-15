@@ -70,13 +70,20 @@
     </div>
 
     <div class="tabs">
-      <div class="tab on" data-t="providers" onclick="tab('providers')">Providers</div>
+      <div class="tab on" data-t="harnesses" onclick="tab('harnesses')">Harnesses</div>
+      <div class="tab" data-t="providers" onclick="tab('providers')">Model endpoints</div>
       <div class="tab" data-t="tokens" onclick="tab('tokens')">Machine tokens</div>
       <div class="tab" data-t="models" onclick="tab('models')">Model routing</div>
       <div class="tab" data-t="activity" onclick="tab('activity')">Activity</div>
     </div>
 
-    <section id="t_providers">
+    <section id="t_harnesses">
+      <p class="muted" style="margin:0 0 14px">The agents you run. Connect each auth method once — the machine running the harness then holds only a <code>pa_</code> token.</p>
+      <div class="grid" id="harngrid"></div>
+    </section>
+
+    <section id="t_providers" class="hide">
+      <p class="muted" style="margin:0 0 14px">Raw model backends for model-agnostic harnesses (aider, Cline, Codex pointed elsewhere…).</p>
       <div class="grid" id="provgrid"></div>
     </section>
 
@@ -86,12 +93,13 @@
         <div class="row">
           <input id="tk_label" placeholder="label (e.g. macbook-01)"/>
           <input id="tk_scope" placeholder="scope: * or anthropic:claude-*" style="flex:1"/>
-          <input id="tk_ttl" type="number" placeholder="ttl (s)" style="width:110px"/>
+          <input id="tk_ttl" type="number" placeholder="ttl (s)" style="width:100px"/>
+          <input id="tk_budget" type="number" step="0.01" placeholder="budget $" style="width:100px"/>
           <button onclick="mintToken()">Mint</button>
         </div>
         <div id="tk_out" class="tok hide"></div>
       </div>
-      <div class="card"><table><thead><tr><th>ID</th><th>Label</th><th>Token</th><th>Scope</th><th>Status</th><th></th></tr></thead><tbody id="toks"></tbody></table></div>
+      <div class="card"><table><thead><tr><th>ID</th><th>Label</th><th>Token</th><th>Scope</th><th>Budget</th><th>Status</th><th></th></tr></thead><tbody id="toks"></tbody></table></div>
     </section>
 
     <section id="t_models" class="hide">
@@ -121,7 +129,7 @@ async function api(p,o={}){const r=await fetch(p,{...o,headers:{...H(),...(o.hea
 function val(id){return document.getElementById(id).value.trim()}
 function saveAdmin(){const v=document.getElementById("admintok").value.trim();if(v){localStorage.setItem("pa_admin",v);boot()}}
 function logout(){localStorage.removeItem("pa_admin");document.getElementById("app").classList.add("hide");document.getElementById("gate").classList.remove("hide")}
-function tab(t){document.querySelectorAll(".tab").forEach(e=>e.classList.toggle("on",e.dataset.t===t));["providers","tokens","models","activity"].forEach(s=>document.getElementById("t_"+s).classList.toggle("hide",s!==t))}
+function tab(t){document.querySelectorAll(".tab").forEach(e=>e.classList.toggle("on",e.dataset.t===t));["harnesses","providers","tokens","models","activity"].forEach(s=>document.getElementById("t_"+s).classList.toggle("hide",s!==t))}
 
 // ---- provider logos (inline, brand-tinted) ----
 const MARK={
@@ -148,9 +156,28 @@ async function boot(){
     document.getElementById("s_cost").textContent="$"+(u.usage.cost_usd||0).toFixed(4);
     document.getElementById("badge_backend").textContent=u.backend;
     document.getElementById("enc").textContent=u.encryption?"🔒 encrypted at rest":"⚠ encryption off";
-    refreshProviders();refreshTokens();refreshAliases();refreshLogs();
+    renderHarnesses();refreshProviders();refreshTokens();refreshAliases();refreshLogs();
   }catch(e){document.getElementById("gateerr").textContent="Invalid admin token."}
 }
+async function renderHarnesses(){
+  const d=await(await api("/admin/harnesses")).json();
+  document.getElementById("harngrid").innerHTML=d.harnesses.map(h=>{
+    const chips=h.auth.map(a=>{
+      const cls=a.connected?"badge on":(a.ready?"badge":"badge");
+      const tag=a.connected?"✓ connected":(a.ready?"connect":"soon");
+      return `<span class="${cls}" title="${a.ready?'available now':'coming soon'}">${a.label} · ${tag}</span>`}).join("");
+    return `<div class="prov"><div class="top">${logo(h.provider,h.color)}<div style="flex:1"><h3>${h.label}</h3><div class="ep">runs on ${h.provider}</div></div>
+      ${h.configured?'<span class="pill ok">ready</span>':'<span class="pill no">connect a key</span>'}</div>
+      <div class="badges">${chips}</div>
+      <div class="models mono" style="font-size:11px">${h.install}</div>
+      <div class="row"><button class="sm" onclick="openConnect('h_${h.name}')">Connect API key</button></div>
+      <div class="connect" id="c_h_${h.name}">
+        <input id="k_h_${h.name}" type="password" placeholder="${h.provider} API key"/>
+        <div class="row"><button class="sm" onclick="connectHarness('${h.name}','${h.provider}')">Save</button><button class="ghost sm" onclick="openConnect('h_${h.name}')">Cancel</button></div>
+      </div></div>`}).join("");
+}
+async function connectHarness(name,provider){const key=document.getElementById("k_h_"+name).value.trim();if(!key)return;
+  await api("/admin/providers",{method:"POST",body:JSON.stringify({provider,secret:key,kind:"api_key"})});renderHarnesses();refreshProviders()}
 async function refreshProviders(){
   const d=await(await api("/admin/catalog")).json();const g=document.getElementById("provgrid");
   let connected=0;
@@ -176,8 +203,8 @@ async function connect(n){const key=document.getElementById("k_"+n).value.trim()
 async function disconnect(id){await api("/admin/providers/"+id,{method:"DELETE"});refreshProviders()}
 
 async function refreshTokens(){const d=await(await api("/admin/tokens")).json();
-  document.getElementById("toks").innerHTML=d.tokens.map(t=>`<tr><td class="mono">${t.id}</td><td>${t.label||""}</td><td class="mono">${t.masked||""}</td><td class="mono">${(t.scope||[]).join(", ")}</td><td>${t.revoked?'<span class="pill no">revoked</span>':'<span class="pill ok">active</span>'}</td><td>${t.revoked?"":`<button class="danger sm" onclick="revokeTok('${t.id}')">revoke</button>`}</td></tr>`).join("")}
-async function mintToken(){const body={label:val("tk_label")||"machine",scope:(val("tk_scope")||"*").split(",").map(s=>s.trim()),ttl_seconds:parseInt(val("tk_ttl"))||null};
+  document.getElementById("toks").innerHTML=d.tokens.map(t=>`<tr><td class="mono">${t.id}</td><td>${t.label||""}</td><td class="mono">${t.masked||""}</td><td class="mono">${(t.scope||[]).join(", ")}</td><td class="mono">${t.budget_usd?('$'+(t.spent_usd||0).toFixed(4)+' / $'+(+t.budget_usd).toFixed(2)):'—'}</td><td>${t.revoked?'<span class="pill no">revoked</span>':'<span class="pill ok">active</span>'}</td><td>${t.revoked?"":`<button class="danger sm" onclick="revokeTok('${t.id}')">revoke</button>`}</td></tr>`).join("")}
+async function mintToken(){const body={label:val("tk_label")||"machine",scope:(val("tk_scope")||"*").split(",").map(s=>s.trim()),ttl_seconds:parseInt(val("tk_ttl"))||null,budget_usd:parseFloat(val("tk_budget"))||null};
   const d=await(await api("/admin/tokens",{method:"POST",body:JSON.stringify(body)})).json();
   const el=document.getElementById("tk_out");el.classList.remove("hide");el.innerHTML=`<b>Token (shown once):</b><br/><span class="mono">${d.token}</span>`;refreshTokens()}
 async function revokeTok(id){await api("/admin/tokens/"+id,{method:"DELETE"});refreshTokens()}

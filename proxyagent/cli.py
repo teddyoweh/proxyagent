@@ -219,16 +219,19 @@ def token_new(
     scope: list[str] = typer.Option(["*"], "--scope", help="Allowed provider:model globs, e.g. anthropic:claude-*"),
     ttl: Optional[int] = typer.Option(None, "--ttl", help="Seconds until expiry."),
     rate: int = typer.Option(0, "--rate", help="Max requests/min (0 = unlimited)."),
+    budget: Optional[float] = typer.Option(None, "--budget", help="Max $ this token may spend."),
     proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
     admin: Optional[str] = typer.Option(None, "--admin"),
 ):
     """Mint a machine token — give it to a remote machine; it holds no real key."""
     if not _is_remote(proxy, admin):
-        plain, _ = _local_store().create_token(label, list(scope), ttl_seconds=ttl, rate_limit=rate)
+        plain, _ = _local_store().create_token(label, list(scope), ttl_seconds=ttl,
+                                               rate_limit=rate, budget_usd=budget)
     else:
         with _admin_client(proxy, admin) as c:
             r = c.post("/admin/tokens", json={"label": label, "scope": list(scope),
-                                              "ttl_seconds": ttl, "rate_limit": rate})
+                                              "ttl_seconds": ttl, "rate_limit": rate,
+                                              "budget_usd": budget})
         if r.status_code >= 400:
             err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
         plain = r.json()["token"]

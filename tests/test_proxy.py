@@ -165,3 +165,26 @@ def test_model_remap_reroutes_provider():
     _aliases.set_map({"gpt-4o": "anthropic:mock"})
     assert remap("openai", "gpt-4o") == ("anthropic", "mock")
     assert remap("openai", "gpt-4o-mini") == ("openai", "gpt-4o-mini")  # no match
+
+
+def test_budget_exhaustion_returns_402():
+    c = _client()
+    r = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"], "budget_usd": 0.001})
+    tok, tid = r.json()["token"], r.json()["id"]
+    # under budget (mock costs $0) → ok
+    assert c.post("/anthropic/v1/messages", headers={"x-api-key": tok},
+                  json={"model": "mock", "messages": [{"role": "user", "content": "hi"}]}).status_code == 200
+    # record spend over the cap, then the next call is blocked
+    c.app.state.store.log_request(token_id=tid, provider="anthropic", model="x", status=200, cost_usd=0.05)
+    assert c.post("/anthropic/v1/messages", headers={"x-api-key": tok},
+                  json={"model": "mock", "messages": []}).status_code == 402
+
+
+def test_harness_catalog():
+    c = _client()
+    h = c.get("/admin/harnesses", headers=ADMIN).json()["harnesses"]
+    names = {x["name"] for x in h}
+    assert {"claude-code", "codex", "gemini-cli"} <= names
+    cc = next(x for x in h if x["name"] == "claude-code")
+    assert {a["mode"] for a in cc["auth"]} == {"api_key", "oauth", "bedrock", "vertex"}
+    assert any(a["mode"] == "api_key" and a["ready"] for a in cc["auth"])

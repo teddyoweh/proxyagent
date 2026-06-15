@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS proxy_agent_tokens (
     id TEXT PRIMARY KEY, hash TEXT NOT NULL UNIQUE, label TEXT,
     scope_json TEXT NOT NULL DEFAULT '["*"]', rate_limit INTEGER NOT NULL DEFAULT 0,
     created_ms BIGINT, expires_ms BIGINT, revoked INTEGER NOT NULL DEFAULT 0,
-    last_used_ms BIGINT, masked TEXT
+    last_used_ms BIGINT, masked TEXT, budget_usd DOUBLE PRECISION
 );
 CREATE TABLE IF NOT EXISTS proxy_agent_keys (
     id TEXT PRIMARY KEY, provider TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'api_key',
@@ -47,21 +47,31 @@ class Store:
         self.db = DB(str(path), url=url)
         self.db.executescript(_SCHEMA)
         self.backend = "postgres" if self.db.pg else "sqlite"
+        # migrate older DBs created before budget_usd existed
+        try:
+            self.db.execute("ALTER TABLE proxy_agent_tokens ADD COLUMN budget_usd DOUBLE PRECISION")
+        except Exception:
+            pass
 
     # -- machine tokens ---------------------------------------------------- #
 
-    def create_token(self, label, scope, *, ttl_seconds=None, rate_limit=0):
+    def create_token(self, label, scope, *, ttl_seconds=None, rate_limit=0, budget_usd=None):
         plain = new_token()
         tid = "tok_" + uuid.uuid4().hex[:12]
         expires = now_ms() + ttl_seconds * 1000 if ttl_seconds else None
         self.db.execute(
             """INSERT INTO proxy_agent_tokens
-               (id, hash, label, scope_json, rate_limit, created_ms, expires_ms, masked)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+               (id, hash, label, scope_json, rate_limit, created_ms, expires_ms, masked, budget_usd)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (tid, hash_token(plain), label, json.dumps(scope), rate_limit, now_ms(),
-             expires, mask(plain)),
+             expires, mask(plain), budget_usd),
         )
         return plain, self.get_token(tid)
+
+    def token_spend(self, token_id: str) -> float:
+        r = self.db.fetchone(
+            "SELECT COALESCE(SUM(cost_usd),0) s FROM proxy_agent_calls WHERE token_id=?", (token_id,))
+        return float((r or {}).get("s", 0) or 0)
 
     def get_token(self, tid):
         return self.db.fetchone("SELECT * FROM proxy_agent_tokens WHERE id=?", (tid,))
@@ -88,10 +98,12 @@ class Store:
     # -- provider credentials (proxy_agent_keys) --------------------------- #
 
     def add_credential(self, provider, secret, *, kind="api_key", refresh=None,
-                       expires_ms=None, label=None, meta=None):
+                       expires_ms=None, label=None, meta=None, replace=True):
         cid = "key_" + uuid.uuid4().hex[:12]
-        # one active credential per provider: deactivate older ones
-        self.db.execute("UPDATE proxy_agent_keys SET active=0 WHERE provider=?", (provider,))
+        # replace=True (default, the UI "connect"): swap the key. replace=False adds an
+        # ADDITIONAL active key to the provider's pool for failover/rotation.
+        if replace:
+            self.db.execute("UPDATE proxy_agent_keys SET active=0 WHERE provider=?", (provider,))
         self.db.execute(
             """INSERT INTO proxy_agent_keys
                (id, provider, kind, secret, refresh, expires_ms, label, created_ms, meta_json, active)

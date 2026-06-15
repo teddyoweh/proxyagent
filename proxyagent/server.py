@@ -15,7 +15,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from . import aliases, crypto
-from .config import CATALOG, Config, PROVIDERS
+from .config import AUTH_LABELS, AUTH_READY, CATALOG, HARNESSES, Config, PROVIDERS
 from .providers import forward, scope_allows
 from .security import token_matches
 from .store import Store, now_ms
@@ -29,6 +29,7 @@ class TokenBody(BaseModel):
     scope: list[str] = ["*"]
     ttl_seconds: int | None = None
     rate_limit: int = 0
+    budget_usd: float | None = None
 
 
 class ProviderBody(BaseModel):
@@ -66,6 +67,9 @@ def create_app(config: Config | None = None) -> FastAPI:
             raise HTTPException(401, "token expired")
         if row["rate_limit"] and store.recent_request_count(row["id"]) >= row["rate_limit"]:
             raise HTTPException(429, "rate limit exceeded")
+        budget = row.get("budget_usd")
+        if budget is not None and store.token_spend(row["id"]) >= budget:
+            raise HTTPException(402, f"token budget of ${budget:.4f} exhausted")
         store.touch_token(row["id"])
         return row
 
@@ -147,10 +151,10 @@ def create_app(config: Config | None = None) -> FastAPI:
     async def create_token(body: TokenBody, authorization: str | None = Header(None),
                            x_admin_token: str | None = Header(None)):
         require_admin(authorization, x_admin_token)
-        plain, row = store.create_token(body.label, body.scope,
-                                        ttl_seconds=body.ttl_seconds, rate_limit=body.rate_limit)
+        plain, row = store.create_token(body.label, body.scope, ttl_seconds=body.ttl_seconds,
+                                        rate_limit=body.rate_limit, budget_usd=body.budget_usd)
         return {"token": plain, "id": row["id"], "label": row["label"],
-                "scope": body.scope, "note": "shown once — store it now"}
+                "scope": body.scope, "budget_usd": body.budget_usd, "note": "shown once — store it now"}
 
     @app.get("/admin/tokens")
     async def list_tokens_ep(authorization: str | None = Header(None),
@@ -161,7 +165,8 @@ def create_app(config: Config | None = None) -> FastAPI:
             out.append({"id": t["id"], "label": t["label"], "masked": t["masked"],
                         "scope": _json.loads(t["scope_json"]), "revoked": bool(t["revoked"]),
                         "rate_limit": t["rate_limit"], "expires_ms": t["expires_ms"],
-                        "last_used_ms": t["last_used_ms"]})
+                        "last_used_ms": t["last_used_ms"], "budget_usd": t.get("budget_usd"),
+                        "spent_usd": round(store.token_spend(t["id"]), 6)})
         return {"tokens": out}
 
     @app.delete("/admin/tokens/{tid}")
@@ -217,6 +222,26 @@ def create_app(config: Config | None = None) -> FastAPI:
         if not store.remove_credential(cid):
             raise HTTPException(404, "no such credential")
         return {"ok": True}
+
+    @app.get("/admin/harnesses")
+    async def harnesses(authorization: str | None = Header(None),
+                        x_admin_token: str | None = Header(None)):
+        require_admin(authorization, x_admin_token)
+        stored = {c["provider"] for c in store.list_credentials() if c["active"]}
+        out = []
+        for name, h in HARNESSES.items():
+            prov = PROVIDERS.get(h["provider"])
+            configured = bool(prov and prov.key) or h["provider"] in stored
+            out.append({
+                "name": name, "label": h["label"], "provider": h["provider"],
+                "color": h["color"], "install": h["install"],
+                "auth": [{"mode": m, "label": AUTH_LABELS.get(m, m),
+                          "ready": m in AUTH_READY,
+                          "connected": m == "api_key" and configured}
+                         for m in h["auth"]],
+                "configured": configured,
+            })
+        return {"harnesses": out}
 
     @app.get("/admin/catalog")
     async def catalog(authorization: str | None = Header(None),

@@ -136,6 +136,27 @@ proxyagent.run("claude-code", goal="build the app",
                proxy="https://proxy.you.com", token=token)
 ```
 
+## Harnesses & auth modes
+You run an **agent harness**, and each one can authenticate several ways. The proxy's job
+is to centralise *all* of them so the machine running the harness holds only a `pa_` token:
+
+| Harness | Provider | Auth modes |
+|---|---|---|
+| **Claude Code** | Anthropic | API key · OAuth (subscription) · AWS Bedrock · Google Vertex |
+| **Codex** | OpenAI | API key · OAuth (ChatGPT) · Azure |
+| **Gemini CLI** | Google | API key · OAuth · Vertex |
+
+Connect each mode once in the dashboard's **Harnesses** tab. API-key mode is wired today;
+Bedrock / Vertex / OAuth-refresh (the cloud-credential paths enterprises actually use) are
+being built out — the proxy holds the AWS/GCP creds and signs upstream, so the machine needs
+none. The model providers below are the *backends* for model-agnostic harnesses (aider, Cline…).
+
+## Per-token budgets
+Cap what any token can spend; once its summed cost crosses the cap, the proxy returns **402**.
+```bash
+proxyagent token new ci --budget 5.00      # this token may spend at most $5
+```
+
 ## Supported providers
 `anthropic` · `openai` · `gemini` · `groq` · `openrouter` · `mistral` · `deepseek` ·
 `xai` · `together` — Anthropic uses its Messages API; the rest are OpenAI-compatible.

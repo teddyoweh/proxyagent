@@ -83,6 +83,27 @@ CATALOG: dict[str, dict] = {
 }
 
 
+# Agent harnesses (what you actually RUN) and the auth modes each supports. The model
+# providers above are the *backends*; these are the agents. Auth mode availability is
+# what makes the proxy valuable — it can centralise all of them so the machine holds none.
+HARNESSES: dict[str, dict] = {
+    "claude-code": {"label": "Claude Code", "provider": "anthropic", "color": "#D97757",
+                    "install": "npm i -g @anthropic-ai/claude-code",
+                    "auth": ["api_key", "oauth", "bedrock", "vertex"]},
+    "codex":       {"label": "Codex", "provider": "openai", "color": "#10A37F",
+                    "install": "npm i -g @openai/codex",
+                    "auth": ["api_key", "oauth", "azure"]},
+    "gemini-cli":  {"label": "Gemini CLI", "provider": "gemini", "color": "#4285F4",
+                    "install": "npm i -g @google/gemini-cli",
+                    "auth": ["api_key", "oauth", "vertex"]},
+}
+AUTH_LABELS = {"api_key": "API key", "oauth": "OAuth", "bedrock": "AWS Bedrock",
+               "vertex": "Google Vertex", "azure": "Azure"}
+# Auth modes that are fully wired today (just a key swap). Others are surfaced in the
+# UI as "available" and built out (Bedrock SigV4 / Vertex token / OAuth refresh).
+AUTH_READY = {"api_key"}
+
+
 @dataclass
 class Config:
     home: Path = HOME
