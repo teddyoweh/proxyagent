@@ -59,6 +59,30 @@ PROVIDERS: dict[str, Provider] = {
 }
 
 
+# Display metadata for the dashboard: label, the auth kinds each provider supports,
+# a brand accent colour, and example models.
+CATALOG: dict[str, dict] = {
+    "anthropic":  {"label": "Anthropic",   "kinds": ["api_key", "oauth"], "color": "#D97757",
+                   "models": ["claude-opus-4", "claude-sonnet-4-5", "claude-haiku-4"]},
+    "openai":     {"label": "OpenAI",       "kinds": ["api_key", "oauth"], "color": "#10A37F",
+                   "models": ["gpt-5", "gpt-4.1", "gpt-4o", "o3"]},
+    "gemini":     {"label": "Google Gemini","kinds": ["api_key"],          "color": "#4285F4",
+                   "models": ["gemini-2.5-pro", "gemini-2.5-flash"]},
+    "groq":       {"label": "Groq",         "kinds": ["api_key"],          "color": "#F55036",
+                   "models": ["llama-3.3-70b", "deepseek-r1-distill"]},
+    "openrouter": {"label": "OpenRouter",   "kinds": ["api_key"],          "color": "#7C7CFF",
+                   "models": ["anthropic/claude-sonnet-4.5", "openai/gpt-5"]},
+    "mistral":    {"label": "Mistral",      "kinds": ["api_key"],          "color": "#FF7000",
+                   "models": ["mistral-large", "codestral"]},
+    "deepseek":   {"label": "DeepSeek",     "kinds": ["api_key"],          "color": "#4D6BFE",
+                   "models": ["deepseek-chat", "deepseek-reasoner"]},
+    "xai":        {"label": "xAI",          "kinds": ["api_key"],          "color": "#111111",
+                   "models": ["grok-4", "grok-3-mini"]},
+    "together":   {"label": "Together",     "kinds": ["api_key"],          "color": "#0F6FFF",
+                   "models": ["llama-3.3-70b", "qwen-2.5-72b"]},
+}
+
+
 @dataclass
 class Config:
     home: Path = HOME

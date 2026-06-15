@@ -5,121 +5,193 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>proxyagent</title>
 <style>
-  :root { --bg:#0b0c0e; --panel:#15171a; --line:#23262b; --txt:#e7e9ec; --dim:#8a9099; --grn:#34d39e; --red:#f87171; --yel:#fbbf24; }
-  * { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--txt); font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto; }
-  a { color:var(--grn); } code,.mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
-  header { display:flex; align-items:center; justify-content:space-between; padding:18px 28px; border-bottom:1px solid var(--line); }
-  .brand { display:flex; align-items:center; gap:10px; font-weight:600; font-size:16px; }
-  .dot { width:9px; height:9px; border-radius:50%; background:var(--grn); box-shadow:0 0 10px 1px rgba(52,211,158,.5); }
-  main { max-width:1100px; margin:0 auto; padding:28px; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:26px; }
-  .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px; }
-  .stat .n { font-size:30px; font-weight:600; } .stat .l { color:var(--dim); font-size:11px; text-transform:uppercase; letter-spacing:.08em; margin-top:4px; }
-  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); margin:26px 0 12px; }
-  table { width:100%; border-collapse:collapse; } th,td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); font-size:13px; }
-  th { color:var(--dim); font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:.06em; }
-  input,button,select { font:inherit; border-radius:9px; border:1px solid var(--line); background:#0e1013; color:var(--txt); padding:8px 11px; }
-  button { background:var(--grn); color:#04130d; border:none; font-weight:600; cursor:pointer; } button.ghost { background:transparent; color:var(--dim); border:1px solid var(--line); }
-  button:hover { filter:brightness(1.08); } .row { display:flex; gap:9px; flex-wrap:wrap; align-items:center; }
-  .pill { padding:2px 9px; border-radius:99px; font-size:11px; } .pill.ok { background:rgba(52,211,158,.12); color:var(--grn); } .pill.no { background:rgba(248,113,113,.12); color:var(--red); }
-  .gate { max-width:420px; margin:90px auto; text-align:center; } .gate input { width:100%; margin:14px 0; }
-  .tok { background:#0e1013; border:1px dashed var(--grn); padding:12px; border-radius:10px; word-break:break-all; margin-top:12px; }
-  .hide { display:none; }
+  :root{--bg:#0a0b0d;--panel:#141619;--panel2:#1a1d21;--line:#23262c;--txt:#eceef1;--dim:#878d96;--grn:#34d39e;--red:#f87171;--yel:#fbbf24;--blu:#6ea8fe}
+  *{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto}
+  code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  a{color:var(--grn);text-decoration:none}
+  header{position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:14px 26px;border-bottom:1px solid var(--line);background:rgba(10,11,13,.8);backdrop-filter:blur(12px)}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:650;font-size:16px}
+  .logo{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#34d39e,#2563eb);display:grid;place-items:center;color:#04130d;font-weight:800}
+  main{max-width:1120px;margin:0 auto;padding:26px}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:24px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
+  .stat .n{font-size:30px;font-weight:680;letter-spacing:-.02em}.stat .l{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.09em;margin-top:5px}
+  .tabs{display:flex;gap:4px;margin-bottom:18px;border-bottom:1px solid var(--line)}
+  .tab{padding:9px 15px;color:var(--dim);cursor:pointer;border-bottom:2px solid transparent;font-weight:550}
+  .tab.on{color:var(--txt);border-bottom-color:var(--grn)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:14px}
+  .prov{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;transition:border-color .15s}
+  .prov:hover{border-color:#33383f}
+  .prov .top{display:flex;align-items:center;gap:12px}
+  .tile{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;flex:none;font-weight:800;font-size:17px}
+  .prov h3{margin:0;font-size:15px;font-weight:620}.prov .ep{color:var(--dim);font-size:11px;margin-top:1px}
+  .badges{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}
+  .badge{font-size:10.5px;padding:2px 8px;border-radius:99px;background:#1f2329;color:var(--dim);text-transform:uppercase;letter-spacing:.04em}
+  .badge.on{background:rgba(52,211,158,.13);color:var(--grn)}
+  .models{color:var(--dim);font-size:11.5px;margin:6px 0 12px;min-height:16px}
+  input,button,select{font:inherit;border-radius:9px;border:1px solid var(--line);background:#0e1013;color:var(--txt);padding:8px 11px;outline:none}
+  input:focus,select:focus{border-color:#3a4048}
+  button{background:var(--grn);color:#04130d;border:none;font-weight:640;cursor:pointer}button:hover{filter:brightness(1.07)}
+  button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line)}button.ghost:hover{color:var(--txt)}
+  button.danger{background:transparent;color:var(--red);border:1px solid #3a2626}
+  button.sm{padding:6px 11px;font-size:12.5px;border-radius:8px}
+  .row{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+  .connect{margin-top:4px;display:none;gap:8px;flex-direction:column}
+  .connect.open{display:flex}
+  table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--line);font-size:13px}
+  th{color:var(--dim);font-weight:520;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+  .pill{padding:2px 9px;border-radius:99px;font-size:11px}.pill.ok{background:rgba(52,211,158,.12);color:var(--grn)}.pill.no{background:rgba(248,113,113,.12);color:var(--red)}
+  .gate{max-width:430px;margin:96px auto;text-align:center}.gate input{width:100%;margin:14px 0}
+  .tok{background:#0e1013;border:1px dashed var(--grn);padding:12px;border-radius:10px;word-break:break-all;margin-top:12px;font-size:13px}
+  .hide{display:none}.muted{color:var(--dim)}.h{display:flex;justify-content:space-between;align-items:center;margin:0 0 12px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin:0}
 </style>
 </head>
 <body>
 <div id="gate" class="gate">
-  <div class="brand" style="justify-content:center"><span class="dot"></span> proxyagent</div>
-  <p style="color:var(--dim)">Paste your admin token (printed by <code>proxyagent serve</code>).</p>
-  <input id="admintok" type="password" placeholder="pa_admin_…" />
+  <div class="brand" style="justify-content:center"><span class="logo">P</span> proxyagent</div>
+  <p class="muted">Paste your admin token — reveal it with <code>proxyagent admin-token</code>.</p>
+  <input id="admintok" type="password" placeholder="pa_admin_…" onkeydown="if(event.key==='Enter')saveAdmin()"/>
   <button onclick="saveAdmin()">Open dashboard</button>
   <p id="gateerr" style="color:var(--red)"></p>
 </div>
 
 <div id="app" class="hide">
   <header>
-    <div class="brand"><span class="dot"></span> proxyagent</div>
-    <div class="row"><span id="provs" style="color:var(--dim)"></span><button class="ghost" onclick="logout()">Sign out</button></div>
+    <div class="brand"><span class="logo">P</span> proxyagent <span id="badge_backend" class="badge" style="margin-left:6px"></span></div>
+    <div class="row"><span id="enc" class="muted" style="font-size:12px"></span><button class="ghost sm" onclick="logout()">Sign out</button></div>
   </header>
   <main>
-    <div class="grid">
+    <div class="stats">
       <div class="card stat"><div class="n" id="s_req">0</div><div class="l">Requests</div></div>
-      <div class="card stat"><div class="n" id="s_in">0</div><div class="l">Input tokens</div></div>
-      <div class="card stat"><div class="n" id="s_out">0</div><div class="l">Output tokens</div></div>
+      <div class="card stat"><div class="n" id="s_tok">0</div><div class="l">Tokens (in/out)</div></div>
       <div class="card stat"><div class="n" id="s_cost" style="color:var(--grn)">$0</div><div class="l">Cost</div></div>
-      <div class="card stat"><div class="n" id="s_tools">0</div><div class="l">Proxied tools</div></div>
+      <div class="card stat"><div class="n" id="s_prov">0</div><div class="l">Providers connected</div></div>
     </div>
 
-    <h2>Mint a machine token</h2>
-    <div class="card">
-      <div class="row">
-        <input id="t_label" placeholder="label (e.g. macbook-01)" />
-        <input id="t_scope" placeholder="scope: * or anthropic:claude-*" style="flex:1" />
-        <input id="t_ttl" type="number" placeholder="ttl (s)" style="width:110px" />
-        <button onclick="mint()">Mint token</button>
+    <div class="tabs">
+      <div class="tab on" data-t="providers" onclick="tab('providers')">Providers</div>
+      <div class="tab" data-t="tokens" onclick="tab('tokens')">Machine tokens</div>
+      <div class="tab" data-t="models" onclick="tab('models')">Model routing</div>
+      <div class="tab" data-t="activity" onclick="tab('activity')">Activity</div>
+    </div>
+
+    <section id="t_providers">
+      <div class="grid" id="provgrid"></div>
+    </section>
+
+    <section id="t_tokens" class="hide">
+      <div class="card" style="margin-bottom:16px">
+        <div class="h"><h2>Mint a machine token</h2></div>
+        <div class="row">
+          <input id="tk_label" placeholder="label (e.g. macbook-01)"/>
+          <input id="tk_scope" placeholder="scope: * or anthropic:claude-*" style="flex:1"/>
+          <input id="tk_ttl" type="number" placeholder="ttl (s)" style="width:110px"/>
+          <button onclick="mintToken()">Mint</button>
+        </div>
+        <div id="tk_out" class="tok hide"></div>
       </div>
-      <div id="minted" class="tok hide"></div>
-      <p style="color:var(--dim);margin:10px 0 0">The machine holds only this token — never a real key. Revoke anytime.</p>
-    </div>
+      <div class="card"><table><thead><tr><th>ID</th><th>Label</th><th>Token</th><th>Scope</th><th>Status</th><th></th></tr></thead><tbody id="toks"></tbody></table></div>
+    </section>
 
-    <h2>Machine tokens</h2>
-    <div class="card"><table><thead><tr><th>ID</th><th>Label</th><th>Token</th><th>Scope</th><th>Status</th><th></th></tr></thead><tbody id="toks"></tbody></table></div>
+    <section id="t_models" class="hide">
+      <div class="card" style="margin-bottom:16px">
+        <div class="h"><h2>Remap a model</h2></div>
+        <div class="row">
+          <input id="al_match" placeholder="match: * or gpt-4o"/>
+          <span class="muted">→</span>
+          <input id="al_target" placeholder="target: mock or anthropic:claude-sonnet-4-5" style="flex:1"/>
+          <button onclick="setAlias()">Map</button>
+        </div>
+        <p class="muted" style="margin:10px 0 0">Tip: map <code>* → mock</code> to run any agent fully offline (no keys).</p>
+      </div>
+      <div class="card"><table><thead><tr><th>Match</th><th>→ Target</th><th></th></tr></thead><tbody id="aliases"></tbody></table></div>
+    </section>
 
-    <h2>Recent requests <span style="color:var(--dim);font-weight:400;text-transform:none;letter-spacing:0">· live</span></h2>
-    <div class="card"><table><thead><tr><th>Time</th><th>Token</th><th>Provider</th><th>Model</th><th>Status</th><th>In</th><th>Out</th><th>ms</th></tr></thead><tbody id="logs"></tbody></table></div>
+    <section id="t_activity" class="hide">
+      <div class="card"><table><thead><tr><th>Time</th><th>Token</th><th>Provider</th><th>Model</th><th>Status</th><th>In</th><th>Out</th><th>Cost</th><th>ms</th></tr></thead><tbody id="logs"></tbody></table></div>
+    </section>
   </main>
 </div>
 
 <script>
-const A = () => localStorage.getItem("pa_admin");
-const H = () => ({ "x-admin-token": A(), "content-type": "application/json" });
-async function api(path, opts={}) { const r = await fetch(path, { ...opts, headers: { ...H(), ...(opts.headers||{}) } }); if (r.status===401) { logout(); throw new Error("unauthorized"); } return r; }
+const A=()=>localStorage.getItem("pa_admin");
+const H=()=>({"x-admin-token":A(),"content-type":"application/json"});
+async function api(p,o={}){const r=await fetch(p,{...o,headers:{...H(),...(o.headers||{})}});if(r.status===401){logout();throw new Error("401")}return r}
+function val(id){return document.getElementById(id).value.trim()}
+function saveAdmin(){const v=document.getElementById("admintok").value.trim();if(v){localStorage.setItem("pa_admin",v);boot()}}
+function logout(){localStorage.removeItem("pa_admin");document.getElementById("app").classList.add("hide");document.getElementById("gate").classList.remove("hide")}
+function tab(t){document.querySelectorAll(".tab").forEach(e=>e.classList.toggle("on",e.dataset.t===t));["providers","tokens","models","activity"].forEach(s=>document.getElementById("t_"+s).classList.toggle("hide",s!==t))}
 
-function saveAdmin() { const v = document.getElementById("admintok").value.trim(); if (!v) return; localStorage.setItem("pa_admin", v); boot(); }
-function logout() { localStorage.removeItem("pa_admin"); document.getElementById("app").classList.add("hide"); document.getElementById("gate").classList.remove("hide"); }
+// ---- provider logos (inline, brand-tinted) ----
+const MARK={
+  anthropic:'<path d="M9.6 3 3 21h4.1l1.2-3.5h5.9L15.4 21H20L13.4 3H9.6Zm-.4 10.5 1.9-5.4 2 5.4H9.2Z"/>',
+  openai:'<path d="M12 2.6c1.9 0 3.5 1.3 4 3a4.2 4.2 0 0 1 2.3 6.8 4.2 4.2 0 0 1-4 5.8 4.2 4.2 0 0 1-8.6-1A4.2 4.2 0 0 1 5.7 12 4.2 4.2 0 0 1 8 5.5a4.2 4.2 0 0 1 4-2.9Zm0 4.6a4.8 4.8 0 1 0 0 9.6 4.8 4.8 0 0 0 0-9.6Z"/>',
+  gemini:'<path d="M12 2c.4 4.6 3.4 7.6 8 8-4.6.4-7.6 3.4-8 8-.4-4.6-3.4-7.6-8-8 4.6-.4 7.6-3.4 8-8Z"/>',
+  groq:'<path d="M12 3a6 6 0 1 0 4.2 10.3l-2-2A3.2 3.2 0 1 1 12 6.2c.9 0 1.6.3 2.2.8L16.3 5A6 6 0 0 0 12 3Zm2 7v3.3h2.6V10H14Z"/>',
+  openrouter:'<path d="M3 8h6l3 4 3-4h6M3 16h6l3-4M21 8l-3 8h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+  mistral:'<g><rect x="3" y="4" width="3.4" height="3.4"/><rect x="17.6" y="4" width="3.4" height="3.4"/><rect x="7.3" y="8.3" width="3.4" height="3.4"/><rect x="13.3" y="8.3" width="3.4" height="3.4"/><rect x="3" y="12.6" width="3.4" height="3.4"/><rect x="17.6" y="12.6" width="3.4" height="3.4"/><rect x="3" y="16.9" width="18" height="3.1"/></g>',
+  deepseek:'<path d="M4 9c3 0 4 2 7 2s4-3 8-2c-1 4-5 7-9 7-3 0-6-2-6-5 0-1 0-2 0-2Zm12 1.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z"/>',
+  xai:'<path d="M4 4h3.2l4 5.6L15.8 4H19l-6 8 6.2 8h-3.2l-4.4-6L7 20H4l6.4-8.4L4 4Z"/>',
+  together:'<path d="M8 5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7Zm8 7a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7ZM10.5 12.5l3-1.5" fill="none" stroke="currentColor" stroke-width="2"/>',
+};
+function logo(name,color){const m=MARK[name]||`<text x="12" y="16" text-anchor="middle" font-size="13" font-weight="800" fill="currentColor">${(name[0]||"?").toUpperCase()}</text>`;
+  return `<div class="tile" style="background:${hexa(color,.16)};color:${color}"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">${m}</svg></div>`}
+function hexa(h,a){const n=h.replace("#","");const x=parseInt(n.length===3?n.split("").map(c=>c+c).join(""):n,16);return `rgba(${(x>>16)&255},${(x>>8)&255},${x&255},${a})`}
 
-async function boot() {
-  try {
-    const u = await (await api("/admin/usage")).json();
-    document.getElementById("gate").classList.add("hide");
-    document.getElementById("app").classList.remove("hide");
-    document.getElementById("s_req").textContent = u.usage.requests;
-    document.getElementById("s_in").textContent = u.usage.prompt_tokens;
-    document.getElementById("s_out").textContent = u.usage.completion_tokens;
-    document.getElementById("s_cost").textContent = "$" + (u.usage.cost_usd || 0).toFixed(4);
-    document.getElementById("s_tools").textContent = (u.tools||[]).length;
-    document.getElementById("provs").textContent = `${u.backend||"sqlite"} · providers: ` + ((u.providers||[]).join(", ") || "none");
-    refreshTokens(); refreshLogs();
-  } catch (e) { document.getElementById("gateerr").textContent = "Invalid admin token."; }
+async function boot(){
+  try{
+    const u=await(await api("/admin/usage")).json();
+    document.getElementById("gate").classList.add("hide");document.getElementById("app").classList.remove("hide");
+    document.getElementById("s_req").textContent=u.usage.requests;
+    document.getElementById("s_tok").textContent=`${u.usage.prompt_tokens}/${u.usage.completion_tokens}`;
+    document.getElementById("s_cost").textContent="$"+(u.usage.cost_usd||0).toFixed(4);
+    document.getElementById("badge_backend").textContent=u.backend;
+    document.getElementById("enc").textContent=u.encryption?"🔒 encrypted at rest":"⚠ encryption off";
+    refreshProviders();refreshTokens();refreshAliases();refreshLogs();
+  }catch(e){document.getElementById("gateerr").textContent="Invalid admin token."}
 }
+async function refreshProviders(){
+  const d=await(await api("/admin/catalog")).json();const g=document.getElementById("provgrid");
+  let connected=0;
+  g.innerHTML=d.providers.map(p=>{const on=p.via_env||p.via_store;if(on)connected++;
+    const how=p.via_store?`stored ${p.cred_kind}`:(p.via_env?"env":"");
+    return `<div class="prov"><div class="top">${logo(p.name,p.color)}<div style="flex:1"><h3>${p.label}</h3><div class="ep">${p.shape} · ${p.name}</div></div>
+      ${on?'<span class="pill ok">on</span>':'<span class="pill no">off</span>'}</div>
+      <div class="badges">${p.kinds.map(k=>`<span class="badge">${k}</span>`).join("")}${on?`<span class="badge on">${how}</span>`:""}</div>
+      <div class="models">${(p.models||[]).slice(0,2).join(" · ")}</div>
+      <div class="row">${p.via_store?`<button class="danger sm" onclick="disconnect('${p.cred_id}')">Disconnect</button>`:`<button class="sm" onclick="openConnect('${p.name}')">${p.via_env?"Override key":"Connect"}</button>`}</div>
+      <div class="connect" id="c_${p.name}">
+        <input id="k_${p.name}" type="password" placeholder="${p.name} API key${p.kinds.includes('oauth')?' / OAuth token':''}"/>
+        <div class="row">${p.kinds.length>1?`<select id="kind_${p.name}">${p.kinds.map(k=>`<option value="${k}">${k}</option>`).join("")}</select>`:`<input id="kind_${p.name}" type="hidden" value="api_key"/>`}
+          <button class="sm" onclick="connect('${p.name}')">Save</button><button class="ghost sm" onclick="openConnect('${p.name}')">Cancel</button></div>
+      </div></div>`}).join("");
+  document.getElementById("s_prov").textContent=connected;
+  document.getElementById("enc2")&&0;
+}
+function openConnect(n){document.getElementById("c_"+n).classList.toggle("open")}
+async function connect(n){const key=document.getElementById("k_"+n).value.trim();if(!key)return;
+  const kindEl=document.getElementById("kind_"+n);const kind=kindEl?kindEl.value:"api_key";
+  await api("/admin/providers",{method:"POST",body:JSON.stringify({provider:n,secret:key,kind})});refreshProviders()}
+async function disconnect(id){await api("/admin/providers/"+id,{method:"DELETE"});refreshProviders()}
 
-async function refreshTokens() {
-  const d = await (await api("/admin/tokens")).json();
-  document.getElementById("toks").innerHTML = d.tokens.map(t => `
-    <tr><td class="mono">${t.id}</td><td>${t.label||""}</td><td class="mono">${t.masked||""}</td>
-    <td class="mono">${(t.scope||[]).join(", ")}</td>
-    <td>${t.revoked?'<span class="pill no">revoked</span>':'<span class="pill ok">active</span>'}</td>
-    <td>${t.revoked?"":`<button class="ghost" onclick="revoke('${t.id}')">revoke</button>`}</td></tr>`).join("");
-}
-async function refreshLogs() {
-  const d = await (await api("/admin/logs?limit=60")).json();
-  document.getElementById("logs").innerHTML = d.logs.map(g => `
-    <tr><td class="mono">${new Date(g.ts_ms).toLocaleTimeString()}</td><td>${g.token_label||""}</td>
-    <td>${g.provider||""}</td><td class="mono">${(g.model||"").slice(0,26)}</td>
-    <td>${g.status||""}</td><td>${g.prompt_tokens??"-"}</td><td>${g.completion_tokens??"-"}</td><td>${g.latency_ms||""}</td></tr>`).join("");
-}
-async function mint() {
-  const body = { label: val("t_label")||"machine", scope: (val("t_scope")||"*").split(",").map(s=>s.trim()), ttl_seconds: parseInt(val("t_ttl"))||null };
-  const d = await (await api("/admin/tokens", { method:"POST", body: JSON.stringify(body) })).json();
-  const el = document.getElementById("minted"); el.classList.remove("hide");
-  el.innerHTML = `<b>Token (shown once):</b><br/><span class="mono">${d.token}</span>`;
-  refreshTokens(); boot();
-}
-async function revoke(id) { await api("/admin/tokens/"+id, { method:"DELETE" }); refreshTokens(); }
-function val(id){ return document.getElementById(id).value.trim(); }
+async function refreshTokens(){const d=await(await api("/admin/tokens")).json();
+  document.getElementById("toks").innerHTML=d.tokens.map(t=>`<tr><td class="mono">${t.id}</td><td>${t.label||""}</td><td class="mono">${t.masked||""}</td><td class="mono">${(t.scope||[]).join(", ")}</td><td>${t.revoked?'<span class="pill no">revoked</span>':'<span class="pill ok">active</span>'}</td><td>${t.revoked?"":`<button class="danger sm" onclick="revokeTok('${t.id}')">revoke</button>`}</td></tr>`).join("")}
+async function mintToken(){const body={label:val("tk_label")||"machine",scope:(val("tk_scope")||"*").split(",").map(s=>s.trim()),ttl_seconds:parseInt(val("tk_ttl"))||null};
+  const d=await(await api("/admin/tokens",{method:"POST",body:JSON.stringify(body)})).json();
+  const el=document.getElementById("tk_out");el.classList.remove("hide");el.innerHTML=`<b>Token (shown once):</b><br/><span class="mono">${d.token}</span>`;refreshTokens()}
+async function revokeTok(id){await api("/admin/tokens/"+id,{method:"DELETE"});refreshTokens()}
 
-if (A()) boot();
-setInterval(() => { if (A() && !document.getElementById("app").classList.contains("hide")) { refreshLogs(); } }, 4000);
+async function refreshAliases(){const m=(await(await api("/admin/aliases")).json()).map;
+  document.getElementById("aliases").innerHTML=Object.entries(m).map(([k,v])=>`<tr><td class="mono">${k}</td><td class="mono">${v}</td><td><button class="danger sm" onclick="rmAlias('${k}')">remove</button></td></tr>`).join("")||'<tr><td class="muted" colspan="3">No model routes.</td></tr>'}
+async function setAlias(){const m=(await(await api("/admin/aliases")).json()).map;m[val("al_match")||"*"]=val("al_target")||"mock";await api("/admin/aliases",{method:"PUT",body:JSON.stringify({map:m})});document.getElementById("al_match").value="";document.getElementById("al_target").value="";refreshAliases()}
+async function rmAlias(k){const m=(await(await api("/admin/aliases")).json()).map;delete m[k];await api("/admin/aliases",{method:"PUT",body:JSON.stringify({map:m})});refreshAliases()}
+
+async function refreshLogs(){const d=await(await api("/admin/logs?limit=80")).json();
+  document.getElementById("logs").innerHTML=d.logs.map(g=>`<tr><td class="mono">${new Date(g.ts_ms).toLocaleTimeString()}</td><td>${g.token_label||""}</td><td>${g.provider||""}</td><td class="mono">${(g.model||"").slice(0,24)}</td><td>${g.status||""}</td><td>${g.prompt_tokens??"-"}</td><td>${g.completion_tokens??"-"}</td><td>${g.cost_usd?"$"+g.cost_usd.toFixed(4):"-"}</td><td>${g.latency_ms||""}</td></tr>`).join("")}
+
+if(A())boot();
+setInterval(()=>{if(A()&&!document.getElementById("app").classList.contains("hide")){refreshLogs()}},4000);
 </script>
 </body>
 </html>

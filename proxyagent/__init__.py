@@ -16,7 +16,7 @@ from typing import Optional
 
 from .harness import run  # noqa: F401  (the headline SDK call)
 
-__version__ = "0.3.1"
+__version__ = "0.4.0"
 __all__ = ["run", "serve", "create_app", "Config", "Admin", "__version__"]
 
 

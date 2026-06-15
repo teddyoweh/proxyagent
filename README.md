@@ -67,9 +67,15 @@ claude -p "ship it"
 ```
 
 ## The dashboard
-`proxyagent serve` ships a dashboard at `/` — mint/revoke tokens, watch live usage and a
-full request audit log, see configured providers + proxied tools. Paste the admin token to
-open it.
+`proxyagent serve` ships a real dashboard at `/` (reveal the admin token with
+`proxyagent admin-token`):
+
+- **Providers** — a branded catalog of every supported provider; **connect/disconnect**
+  with a key right from the UI, see which auth types each supports (api_key / oauth) and
+  whether it's on via env or stored credentials.
+- **Machine tokens** — mint (scoped/TTL), list, revoke.
+- **Model routing** — add/remove model remaps (e.g. `* → mock` for offline).
+- **Activity** — live request log with usage + cost, and headline stats.
 
 ## Proxied tools — the same trick, for tools
 The proxy can also hold your **tool** keys and hand agents governed tools — so an agent gets

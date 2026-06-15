@@ -15,7 +15,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from . import aliases, crypto
-from .config import Config, PROVIDERS
+from .config import CATALOG, Config, PROVIDERS
 from .providers import forward, scope_allows
 from .security import token_matches
 from .store import Store, now_ms
@@ -217,6 +217,26 @@ def create_app(config: Config | None = None) -> FastAPI:
         if not store.remove_credential(cid):
             raise HTTPException(404, "no such credential")
         return {"ok": True}
+
+    @app.get("/admin/catalog")
+    async def catalog(authorization: str | None = Header(None),
+                      x_admin_token: str | None = Header(None)):
+        require_admin(authorization, x_admin_token)
+        stored = {c["provider"]: c for c in store.list_credentials() if c["active"]}
+        out = []
+        for name, prov in PROVIDERS.items():
+            meta = CATALOG.get(name, {})
+            cred = stored.get(name)
+            out.append({
+                "name": name, "label": meta.get("label", name.title()),
+                "kinds": meta.get("kinds", ["api_key"]), "color": meta.get("color", "#888"),
+                "models": meta.get("models", []), "shape": prov.shape,
+                "via_env": bool(prov.key), "via_store": bool(cred),
+                "cred_id": cred["id"] if cred else None,
+                "cred_kind": cred["kind"] if cred else None,
+                "endpoint": prov.endpoint,
+            })
+        return {"providers": out, "encryption": crypto.encryption_available()}
 
     # -- model aliases / remap -------------------------------------------- #
     @app.get("/admin/aliases")
