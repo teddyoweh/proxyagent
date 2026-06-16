@@ -5,27 +5,31 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>proxyagent</title>
 <style>
-  :root{--bg:#08090b;--panel:#16181d;--panel2:#1e2127;--soft:#22262e;--txt:#eef0f3;--dim:#888e98;--grn:#34d39e;--red:#f6788a}
+  :root{--bg:#08090b;--panel:#16181d;--panel2:#1e2127;--soft:#22262e;--side:#101216;--txt:#eef0f3;--dim:#888e98;--grn:#34d39e;--red:#f6788a}
   *{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto;-webkit-font-smoothing:antialiased}
   code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-  a{color:var(--grn);text-decoration:none}
-  header{position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:16px 28px;background:rgba(8,9,11,.72);backdrop-filter:blur(14px)}
-  .brand{display:flex;align-items:center;gap:10px;font-weight:650;font-size:16px}
+  a{color:inherit;text-decoration:none}
+  #app{display:flex;min-height:100vh}
+  .sidebar{width:236px;flex:none;background:var(--side);display:flex;flex-direction:column;padding:18px 14px;position:sticky;top:0;height:100vh}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:670;font-size:16px;padding:6px 8px 16px}
   .logo{width:27px;height:27px;border-radius:8px;background:linear-gradient(135deg,#34d39e,#3b82f6);display:grid;place-items:center;color:#04130d;font-weight:800}
-  main{max-width:1040px;margin:0 auto;padding:8px 28px 60px}
-  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:26px}
+  nav{display:flex;flex-direction:column;gap:3px}
+  .navitem{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:11px;color:var(--dim);cursor:pointer;font-weight:560}
+  .navitem svg{width:17px;height:17px;opacity:.85}
+  .navitem:hover{color:var(--txt);background:#181b21}
+  .navitem.on{color:var(--txt);background:var(--panel)}
+  .side-foot{margin-top:auto;padding:10px 8px;color:var(--dim);font-size:12px;display:flex;flex-direction:column;gap:8px}
+  main{flex:1;padding:30px 40px;max-width:1000px}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:26px}
   .card{background:var(--panel);border-radius:18px;padding:20px}
-  .stat .n{font-size:31px;font-weight:700;letter-spacing:-.02em}.stat .l{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.09em;margin-top:6px}
-  .tabs{display:flex;gap:6px;margin-bottom:20px}
-  .tab{padding:8px 15px;color:var(--dim);cursor:pointer;font-weight:560;border-radius:10px}
-  .tab:hover,.tab.on{color:var(--txt);background:var(--panel)}
+  .stat .n{font-size:30px;font-weight:700;letter-spacing:-.02em}.stat .l{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.09em;margin-top:6px}
   .tile{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;flex:none;font-weight:800;font-size:16px;overflow:hidden}
   .tile img{width:21px;height:21px;display:block}.tile .fbm{display:none}.tile.fb img{display:none}.tile.fb .fbm{display:flex;align-items:center;justify-content:center}
   .badge{font-size:10.5px;padding:3px 9px;border-radius:8px;background:var(--soft);color:var(--dim);text-transform:uppercase;letter-spacing:.04em}
   .badge.on{background:rgba(52,211,158,.14);color:var(--grn)}
-  input,select{font:inherit;border-radius:11px;border:none;background:var(--panel2);color:var(--txt);padding:10px 12px;outline:none;box-shadow:inset 0 0 0 1px transparent}
-  input:focus,select:focus{box-shadow:inset 0 0 0 1px rgba(52,211,158,.45)}input::placeholder{color:#5a606b}
-  button{font:inherit;background:var(--grn);color:#04130d;border:none;border-radius:11px;padding:10px 15px;font-weight:660;cursor:pointer}button:hover{filter:brightness(1.07)}
+  input,select,textarea{font:inherit;border-radius:11px;border:none;background:var(--panel2);color:var(--txt);padding:10px 12px;outline:none;box-shadow:inset 0 0 0 1px transparent;width:100%}
+  input:focus,select:focus,textarea:focus{box-shadow:inset 0 0 0 1px rgba(52,211,158,.45)}input::placeholder,textarea::placeholder{color:#5a606b}
+  button{font:inherit;background:var(--grn);color:#04130d;border:none;border-radius:11px;padding:10px 15px;font-weight:660;cursor:pointer;width:auto}button:hover{filter:brightness(1.07)}
   button.ghost{background:var(--soft);color:var(--dim)}button.ghost:hover{color:var(--txt)}
   button.danger{background:rgba(246,120,138,.12);color:var(--red)}button.danger:hover{background:rgba(246,120,138,.2)}
   button.sm{padding:7px 12px;font-size:12.5px;border-radius:9px}
@@ -34,11 +38,21 @@
   thead th{color:var(--dim);font-weight:520;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
   tbody tr{transition:background .12s}tbody tr:hover{background:#1a1d23}
   .pill{padding:3px 10px;border-radius:8px;font-size:11px}.pill.ok{background:rgba(52,211,158,.13);color:var(--grn)}.pill.no{background:rgba(246,120,138,.13);color:var(--red)}
-  .gate{max-width:430px;margin:100px auto;text-align:center}.gate input{width:100%;margin:14px 0}
+  .gate{max-width:430px;margin:100px auto;text-align:center}.gate input{margin:14px 0}
   .tok{background:var(--panel2);padding:13px;border-radius:12px;word-break:break-all;margin-top:13px;font-size:13px}
-  .hide{display:none}.muted{color:var(--dim)}.h{display:flex;justify-content:space-between;align-items:center;margin:0 0 14px}
-  h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin:0}
-  .empty{text-align:center;color:var(--dim);padding:46px}
+  .hide{display:none}.muted{color:var(--dim)}.h{display:flex;justify-content:space-between;align-items:center;margin:0 0 16px}
+  h2{font-size:18px;font-weight:660;margin:0;letter-spacing:-.01em}
+  .empty{text-align:center;color:var(--dim);padding:50px}
+  .label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin:16px 0 9px}
+  /* create-access-key modal */
+  .modal{position:fixed;inset:0;background:rgba(4,5,7,.66);backdrop-filter:blur(3px);display:grid;place-items:center;z-index:50;padding:20px}
+  .modal-card{width:520px;max-width:94vw;max-height:90vh;overflow:auto;background:var(--panel);border-radius:20px;padding:24px}
+  .provpick{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:9px}
+  .ppick{display:flex;flex-direction:column;align-items:center;gap:7px;padding:13px 8px;border-radius:14px;background:var(--panel2);cursor:pointer;font-size:11.5px;color:var(--dim);transition:.12s}
+  .ppick:hover{color:var(--txt)}.ppick.sel{box-shadow:inset 0 0 0 1.5px var(--grn);color:var(--txt)}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{padding:7px 13px;border-radius:10px;background:var(--soft);color:var(--dim);cursor:pointer;font-size:12.5px;text-transform:uppercase;letter-spacing:.03em}
+  .chip.sel{background:rgba(52,211,158,.15);color:var(--grn)}
 </style>
 </head>
 <body>
@@ -51,10 +65,21 @@
 </div>
 
 <div id="app" class="hide">
-  <header>
-    <div class="brand"><span class="logo">P</span> proxyagent <span id="badge_backend" class="badge" style="margin-left:6px"></span></div>
-    <div class="row"><span id="enc" class="muted" style="font-size:12px"></span><button class="ghost sm" onclick="logout()">Sign out</button></div>
-  </header>
+  <aside class="sidebar">
+    <div class="brand"><span class="logo">P</span> proxyagent</div>
+    <nav>
+      <div class="navitem on" data-t="keys" onclick="nav('keys')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="15" r="4"/><path d="M10.8 12 19 3.8M16 7l2 2M14 9l2 2"/></svg> Access keys</div>
+      <div class="navitem" data-t="tokens" onclick="nav('tokens')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="8" width="18" height="11" rx="2"/><path d="M7 8V6a5 5 0 0 1 10 0v2"/></svg> Machine tokens</div>
+      <div class="navitem" data-t="models" onclick="nav('models')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 6H15a3 3 0 0 1 3 3v6"/></svg> Model routing</div>
+      <div class="navitem" data-t="activity" onclick="nav('activity')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg> Activity</div>
+    </nav>
+    <div class="side-foot">
+      <div><span id="badge_backend" class="badge"></span></div>
+      <div id="enc"></div>
+      <button class="ghost sm" onclick="logout()" style="width:100%">Sign out</button>
+    </div>
+  </aside>
+
   <main>
     <div class="stats">
       <div class="card stat"><div class="n" id="s_keys">0</div><div class="l">Access keys</div></div>
@@ -63,31 +88,16 @@
       <div class="card stat"><div class="n" id="s_cost" style="color:var(--grn)">$0</div><div class="l">Cost</div></div>
     </div>
 
-    <div class="tabs">
-      <div class="tab on" data-t="keys" onclick="tab('keys')">Access keys</div>
-      <div class="tab" data-t="tokens" onclick="tab('tokens')">Machine tokens</div>
-      <div class="tab" data-t="models" onclick="tab('models')">Model routing</div>
-      <div class="tab" data-t="activity" onclick="tab('activity')">Activity</div>
-    </div>
-
     <section id="t_keys">
       <div class="h"><h2>Access keys</h2><button onclick="openCreate()">+ Create access key</button></div>
-      <div class="card hide" id="createForm" style="margin-bottom:16px">
-        <div class="row" style="margin-bottom:11px">
-          <select id="cf_provider" onchange="onProvider()" style="flex:1"></select>
-          <select id="kind_cf" onchange="onKind('cf')" style="width:140px"></select>
-        </div>
-        <div id="ff_cf"></div>
-        <div class="row" style="margin-top:11px"><button onclick="createKey()">Create access key</button><button class="ghost" onclick="openCreate()">Cancel</button></div>
-      </div>
       <div id="keylist"></div>
     </section>
 
     <section id="t_tokens" class="hide">
+      <div class="h"><h2>Machine tokens</h2></div>
       <div class="card" style="margin-bottom:16px">
-        <div class="h"><h2>Mint a machine token</h2></div>
         <div class="row">
-          <input id="tk_label" placeholder="label (e.g. macbook-01)"/>
+          <input id="tk_label" placeholder="label (e.g. macbook-01)" style="flex:1"/>
           <input id="tk_scope" placeholder="scope: * or anthropic:claude-*" style="flex:1"/>
           <input id="tk_ttl" type="number" placeholder="ttl (s)" style="width:100px"/>
           <input id="tk_budget" type="number" step="0.01" placeholder="budget $" style="width:100px"/>
@@ -99,10 +109,10 @@
     </section>
 
     <section id="t_models" class="hide">
+      <div class="h"><h2>Model routing</h2></div>
       <div class="card" style="margin-bottom:16px">
-        <div class="h"><h2>Remap a model</h2></div>
         <div class="row">
-          <input id="al_match" placeholder="match: * or gpt-4o"/><span class="muted">→</span>
+          <input id="al_match" placeholder="match: * or gpt-4o" style="flex:1"/><span class="muted">→</span>
           <input id="al_target" placeholder="target: mock or anthropic:claude-sonnet-4-5" style="flex:1"/>
           <button onclick="setAlias()">Map</button>
         </div>
@@ -112,21 +122,34 @@
     </section>
 
     <section id="t_activity" class="hide">
+      <div class="h"><h2>Activity</h2></div>
       <div class="card"><table><thead><tr><th>Time</th><th>Token</th><th>Provider</th><th>Model</th><th>Status</th><th>In</th><th>Out</th><th>Cost</th><th>ms</th></tr></thead><tbody id="logs"></tbody></table></div>
     </section>
   </main>
+</div>
+
+<div id="modal" class="modal hide">
+  <div class="modal-card">
+    <div class="h"><h2>Create access key</h2><button class="ghost sm" onclick="closeCreate()">✕</button></div>
+    <div class="label">Provider</div>
+    <div class="provpick" id="provpick"></div>
+    <div class="label">Auth type</div>
+    <div class="chips" id="kindpick"></div>
+    <input type="hidden" id="kind_cf"/>
+    <div id="ff_cf" style="margin-top:12px"></div>
+    <div class="row" style="margin-top:18px"><button onclick="createKey()">Create access key</button><button class="ghost" onclick="closeCreate()">Cancel</button></div>
+  </div>
 </div>
 
 <script>
 const A=()=>localStorage.getItem("pa_admin");
 const H=()=>({"x-admin-token":A(),"content-type":"application/json"});
 async function api(p,o={}){const r=await fetch(p,{...o,headers:{...H(),...(o.headers||{})}});if(r.status===401){logout();throw new Error("401")}return r}
-function val(id){return document.getElementById(id).value.trim()}
+function val(id){const e=document.getElementById(id);return e?e.value.trim():""}
 function saveAdmin(){const v=document.getElementById("admintok").value.trim();if(v){localStorage.setItem("pa_admin",v);boot()}}
 function logout(){localStorage.removeItem("pa_admin");document.getElementById("app").classList.add("hide");document.getElementById("gate").classList.remove("hide")}
-function tab(t){document.querySelectorAll(".tab").forEach(e=>e.classList.toggle("on",e.dataset.t===t));["keys","tokens","models","activity"].forEach(s=>document.getElementById("t_"+s).classList.toggle("hide",s!==t))}
+function nav(t){document.querySelectorAll(".navitem").forEach(e=>e.classList.toggle("on",e.dataset.t===t));["keys","tokens","models","activity"].forEach(s=>document.getElementById("t_"+s).classList.toggle("hide",s!==t))}
 
-// logos: real brand marks via the Simple Icons CDN, tinted; fall back to a drawn mark offline.
 const MARK={
   anthropic:'<path d="M9.6 3 3 21h4.1l1.2-3.5h5.9L15.4 21H20L13.4 3H9.6Zm-.4 10.5 1.9-5.4 2 5.4H9.2Z"/>',
   openai:'<path d="M12 2.6c1.9 0 3.5 1.3 4 3a4.2 4.2 0 0 1 2.3 6.8 4.2 4.2 0 0 1-4 5.8 4.2 4.2 0 0 1-8.6-1A4.2 4.2 0 0 1 5.7 12 4.2 4.2 0 0 1 8 5.5a4.2 4.2 0 0 1 4-2.9Zm0 4.6a4.8 4.8 0 1 0 0 9.6 4.8 4.8 0 0 0 0-9.6Z"/>',
@@ -140,14 +163,12 @@ function logo(name,color){color=color||"#888";
   const inner=SLUG[name]?`<img src="https://cdn.simpleicons.org/${SLUG[name]}/${color.replace("#","")}" alt="${name}" onerror="this.closest('.tile').classList.add('fb')"/><span class="fbm">${mark}</span>`:`<span class="fbm" style="display:flex">${mark}</span>`;
   return `<div class="tile" style="background:${hexa(color,.14)};color:${color}">${inner}</div>`}
 
-// the auth-type fields (the "provider" is essentially the auth type)
 function fieldsFor(uid,kind){
-  if(kind==="bedrock")return `<div class="row"><input id="f1_${uid}" placeholder="AWS access key id" style="flex:1"/><input id="f3_${uid}" placeholder="region (us-east-1)" style="width:150px"/></div><input id="f2_${uid}" type="password" placeholder="AWS secret access key" style="width:100%;margin-top:8px"/>`;
-  if(kind==="azure")return `<input id="f1_${uid}" placeholder="Azure endpoint URL (…/chat/completions?api-version=…)" style="width:100%"/><input id="f2_${uid}" type="password" placeholder="api-key" style="width:100%;margin-top:8px"/>`;
-  if(kind==="vertex")return `<textarea id="f1_${uid}" placeholder="Paste the GCP service-account JSON" style="width:100%;min-height:92px;font:12px ui-monospace,monospace;border:none;border-radius:11px;background:var(--panel2);color:var(--txt);padding:10px 12px;outline:none"></textarea><input id="f3_${uid}" placeholder="region (default us-east5)" style="width:100%;margin-top:8px"/>`;
-  return `<input id="f1_${uid}" type="password" placeholder="${kind==='oauth'?'OAuth access token':'API key'}" style="width:100%"/>`;
+  if(kind==="bedrock")return `<div class="row"><input id="f1_${uid}" placeholder="AWS access key id" style="flex:1"/><input id="f3_${uid}" placeholder="region (us-east-1)" style="width:150px"/></div><input id="f2_${uid}" type="password" placeholder="AWS secret access key" style="margin-top:8px"/>`;
+  if(kind==="azure")return `<input id="f1_${uid}" placeholder="Azure endpoint URL (…/chat/completions?api-version=…)"/><input id="f2_${uid}" type="password" placeholder="api-key" style="margin-top:8px"/>`;
+  if(kind==="vertex")return `<textarea id="f1_${uid}" placeholder="Paste the GCP service-account JSON" style="min-height:92px;font:12px ui-monospace,monospace"></textarea><input id="f3_${uid}" placeholder="region (default us-east5)" style="margin-top:8px"/>`;
+  return `<input id="f1_${uid}" type="password" placeholder="${kind==='oauth'?'OAuth access token':'API key'}"/>`;
 }
-function onKind(uid){document.getElementById("ff_"+uid).innerHTML=fieldsFor(uid,document.getElementById("kind_"+uid).value)}
 async function submitCred(uid,provider){
   const kind=document.getElementById("kind_"+uid).value,g=id=>{const e=document.getElementById(id);return e?e.value.trim():""};
   let secret,meta={};
@@ -155,12 +176,12 @@ async function submitCred(uid,provider){
   else if(kind==="azure"){secret=g("f2_"+uid);meta={endpoint:g("f1_"+uid)}}
   else if(kind==="vertex"){secret=g("f1_"+uid);meta={region:g("f3_"+uid)||"us-east5"}}
   else{secret=g("f1_"+uid)}
-  if(!secret)return;
-  await api("/admin/providers",{method:"POST",body:JSON.stringify({provider,secret,kind,meta})});refreshKeys();
+  if(!secret)return false;
+  await api("/admin/providers",{method:"POST",body:JSON.stringify({provider,secret,kind,meta})});refreshKeys();return true;
 }
 async function disconnect(id){await api("/admin/providers/"+id,{method:"DELETE"});refreshKeys()}
 
-let CATALOG=[];
+let CATALOG=[],cfProvider=null;
 async function boot(){
   try{
     const u=await(await api("/admin/usage")).json();
@@ -180,11 +201,27 @@ async function refreshKeys(){
   document.getElementById("keylist").innerHTML=keys.length
     ?`<div class="card"><table><thead><tr><th></th><th>Provider</th><th>Auth type</th><th>Key</th><th></th></tr></thead><tbody>${keys.map(k=>`<tr><td style="width:50px">${logo(k.provider,k.color)}</td><td>${k.plabel}</td><td><span class="badge on">${k.kind}</span></td><td class="mono">${k.masked||""}</td><td>${k.id?`<button class="danger sm" onclick="disconnect('${k.id}')">remove</button>`:'<span class="muted" style="font-size:11px">from env</span>'}</td></tr>`).join("")}</tbody></table></div>`
     :`<div class="card empty">No access keys yet.<br/><span style="font-size:12.5px">Click <b style="color:var(--txt)">+ Create access key</b> to add one.</span></div>`;
-  const ps=document.getElementById("cf_provider");if(ps&&!ps.dataset.init){ps.dataset.init="1";ps.innerHTML=CATALOG.map(p=>`<option value="${p.name}">${p.label}</option>`).join("");onProvider()}
 }
-function onProvider(){const p=CATALOG.find(x=>x.name===val("cf_provider"))||{};const ks=document.getElementById("kind_cf");ks.innerHTML=(p.kinds||["api_key"]).map(k=>`<option value="${k}">${k}</option>`).join("");onKind("cf")}
-function openCreate(){document.getElementById("createForm").classList.toggle("hide")}
-async function createKey(){await submitCred("cf",val("cf_provider"));document.getElementById("createForm").classList.add("hide")}
+// create flow (modal)
+function openCreate(){
+  if(!CATALOG.length)return;
+  document.getElementById("provpick").innerHTML=CATALOG.map(p=>`<div class="ppick" data-p="${p.name}" onclick="pickProvider('${p.name}')">${logo(p.name,p.color)}<span>${p.label}</span></div>`).join("");
+  document.getElementById("modal").classList.remove("hide");
+  pickProvider(CATALOG[0].name);
+}
+function closeCreate(){document.getElementById("modal").classList.add("hide")}
+function pickProvider(name){cfProvider=name;
+  document.querySelectorAll("#provpick .ppick").forEach(e=>e.classList.toggle("sel",e.dataset.p===name));
+  const p=CATALOG.find(x=>x.name===name)||{kinds:["api_key"]};
+  document.getElementById("kindpick").innerHTML=(p.kinds||["api_key"]).map(k=>`<div class="chip" data-k="${k}" onclick="pickKind('${k}')">${k}</div>`).join("");
+  pickKind((p.kinds||["api_key"])[0]);
+}
+function pickKind(k){
+  document.getElementById("kind_cf").value=k;
+  document.querySelectorAll("#kindpick .chip").forEach(e=>e.classList.toggle("sel",e.dataset.k===k));
+  document.getElementById("ff_cf").innerHTML=fieldsFor("cf",k);
+}
+async function createKey(){if(await submitCred("cf",cfProvider))closeCreate()}
 
 async function refreshTokens(){const d=await(await api("/admin/tokens")).json();
   document.getElementById("toks").innerHTML=d.tokens.map(t=>`<tr><td class="mono">${t.id}</td><td>${t.label||""}</td><td class="mono">${t.masked||""}</td><td class="mono">${(t.scope||[]).join(", ")}</td><td class="mono">${t.budget_usd?('$'+(t.spent_usd||0).toFixed(4)+' / $'+(+t.budget_usd).toFixed(2)):'—'}</td><td>${t.revoked?'<span class="pill no">revoked</span>':'<span class="pill ok">active</span>'}</td><td>${t.revoked?"":`<button class="danger sm" onclick="revokeTok('${t.id}')">revoke</button>`}</td></tr>`).join("")}
