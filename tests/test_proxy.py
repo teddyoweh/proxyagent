@@ -149,6 +149,15 @@ def test_cors_off_by_default():
     assert "access-control-allow-origin" not in r.headers
 
 
+def test_ui_hide_class_wins():
+    """Regression: `.hide` must override #app{display:flex} and .modal{display:grid} —
+    otherwise the app + create-key modal render permanently (stacked over the gate)."""
+    from pathlib import Path
+    import proxyagent
+    html = (Path(proxyagent.__file__).parent / "ui" / "index.html").read_text()
+    assert ".hide{display:none!important}" in html
+
+
 def test_healthz_and_ui():
     c = _client()
     assert c.get("/healthz").json()["ok"] is True
