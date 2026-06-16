@@ -61,6 +61,11 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.state.store = store
     app.state.tools = tools
     started_at = time.time()
+    # Concurrency cap — reject (503) when more than PROXYAGENT_MAX_CONCURRENCY proxied
+    # requests are in flight, protecting upstreams from stampede. 0 = unlimited.
+    max_conc = int(os.environ.get("PROXYAGENT_MAX_CONCURRENCY", "0") or 0)
+    inflight = {"n": 0}
+    app.state.inflight = inflight
 
     # gzip large responses (audit logs, model lists, the dashboard) when the client accepts it.
     from starlette.middleware.gzip import GZipMiddleware
@@ -229,55 +234,61 @@ def create_app(config: Config | None = None) -> FastAPI:
                 _budget_alert("provider", provider, pb, pspend)
                 raise HTTPException(402, f"provider '{provider}' budget of ${pb:g} exhausted")
 
-        tools_on = request.headers.get("x-proxyagent-tools", "").lower() in ("1", "on", "true")
-        used_tools: list[str] = []
-        if tools_on:
-            body = tools.inject(body, PROVIDERS[provider].shape)
-            used_tools = tools.names()
+        if max_conc and inflight["n"] >= max_conc:
+            raise HTTPException(503, f"proxy at capacity ({max_conc} concurrent requests); retry")
+        inflight["n"] += 1
+        try:
+            tools_on = request.headers.get("x-proxyagent-tools", "").lower() in ("1", "on", "true")
+            used_tools: list[str] = []
+            if tools_on:
+                body = tools.inject(body, PROVIDERS[provider].shape)
+                used_tools = tools.names()
 
-        streaming = bool(body.get("stream"))
+            streaming = bool(body.get("stream"))
 
-        # Server-side agentic tool loop: the proxy executes managed tools (keys stay here)
-        # and re-calls the model until it returns a final answer. Non-streaming only.
-        # Step budget: env default, overridable per-request (0 = return the tool request
-        # without executing — handy for clients that want to run tools themselves).
-        if tools_on and not streaming:
-            max_steps = int(os.environ.get("PROXYAGENT_MAX_TOOL_STEPS", "6") or 6)
-            hdr = request.headers.get("x-proxyagent-tool-steps-max")
-            if hdr is not None:
-                try:
-                    max_steps = max(0, min(20, int(hdr)))
-                except ValueError:
-                    pass
-            status, payload, steps = await forward_agentic(
-                config, provider, body, token=token, store=store, tools=tools,
-                max_steps=max_steps, request_id=rid, passthrough_headers=px)
-            return JSONResponse(payload, status_code=status,
-                                headers={"x-proxyagent-tool-steps": str(steps),
-                                         "x-proxyagent-tool-steps-max": str(max_steps),
-                                         "x-proxyagent-request-id": rid})
+            # Server-side agentic tool loop: the proxy executes managed tools (keys stay here)
+            # and re-calls the model until it returns a final answer. Non-streaming only.
+            # Step budget: env default, overridable per-request (0 = return the tool request
+            # without executing — handy for clients that want to run tools themselves).
+            if tools_on and not streaming:
+                max_steps = int(os.environ.get("PROXYAGENT_MAX_TOOL_STEPS", "6") or 6)
+                hdr = request.headers.get("x-proxyagent-tool-steps-max")
+                if hdr is not None:
+                    try:
+                        max_steps = max(0, min(20, int(hdr)))
+                    except ValueError:
+                        pass
+                status, payload, steps = await forward_agentic(
+                    config, provider, body, token=token, store=store, tools=tools,
+                    max_steps=max_steps, request_id=rid, passthrough_headers=px)
+                return JSONResponse(payload, status_code=status,
+                                    headers={"x-proxyagent-tool-steps": str(steps),
+                                             "x-proxyagent-tool-steps-max": str(max_steps),
+                                             "x-proxyagent-request-id": rid})
 
-        # Response cache (non-streaming only): serve identical requests from memory.
-        ck = None
-        if not streaming and cache.enabled() and request.headers.get("x-proxyagent-cache", "").lower() != "no":
-            ck = cache.key(provider, body)
-            hit = cache.get(ck)
-            if hit is not None:
-                store.log_request(token_id=token["id"], token_label=token.get("label"),
-                                  provider=provider, model=model, status=200, cost_usd=0.0,
-                                  tools_used='["cache-hit"]', request_id=rid)
-                return JSONResponse(hit, status_code=200,
-                                    headers={"x-proxyagent-cache": "hit", "x-proxyagent-request-id": rid})
+            # Response cache (non-streaming only): serve identical requests from memory.
+            ck = None
+            if not streaming and cache.enabled() and request.headers.get("x-proxyagent-cache", "").lower() != "no":
+                ck = cache.key(provider, body)
+                hit = cache.get(ck)
+                if hit is not None:
+                    store.log_request(token_id=token["id"], token_label=token.get("label"),
+                                      provider=provider, model=model, status=200, cost_usd=0.0,
+                                      tools_used='["cache-hit"]', request_id=rid)
+                    return JSONResponse(hit, status_code=200,
+                                        headers={"x-proxyagent-cache": "hit", "x-proxyagent-request-id": rid})
 
-        status, headers, payload, _ = await forward(
-            config, provider, body, streaming=streaming, token=token, store=store,
-            tools_used=used_tools, request_id=rid, passthrough_headers=px)
-        if streaming:
-            return StreamingResponse(payload, media_type="text/event-stream",
-                                     headers={"x-proxyagent-request-id": rid})
-        if ck is not None and status == 200 and isinstance(payload, dict):
-            cache.put(ck, payload)
-        return JSONResponse(payload, status_code=status, headers={"x-proxyagent-request-id": rid})
+            status, headers, payload, _ = await forward(
+                config, provider, body, streaming=streaming, token=token, store=store,
+                tools_used=used_tools, request_id=rid, passthrough_headers=px)
+            if streaming:
+                return StreamingResponse(payload, media_type="text/event-stream",
+                                         headers={"x-proxyagent-request-id": rid})
+            if ck is not None and status == 200 and isinstance(payload, dict):
+                cache.put(ck, payload)
+            return JSONResponse(payload, status_code=status, headers={"x-proxyagent-request-id": rid})
+        finally:
+            inflight["n"] -= 1
 
     # OpenAI-compatible providers hit /<provider>/v1/chat/completions; Anthropic-style
     # hit /<provider>/v1/messages. The provider segment selects the upstream.
@@ -367,6 +378,22 @@ def create_app(config: Config | None = None) -> FastAPI:
             out = [t for t in out if ql in (t["label"] or "").lower() or ql in t["id"].lower()
                    or any(ql in s.lower() for s in t["scope"])]
         return {"tokens": out}
+
+    @app.post("/admin/tokens/{tid}/clone")
+    async def clone_token_ep(tid: str, authorization: str | None = Header(None),
+                             x_admin_token: str | None = Header(None)):
+        """Mint a NEW token (new secret) copying an existing one's scope/rate/budget/note."""
+        require_admin(authorization, x_admin_token)
+        src = store.get_token(tid)
+        if not src:
+            raise HTTPException(404, "no such token")
+        scope = _json.loads(src["scope_json"])
+        plain, row = store.create_token((src["label"] or "token") + "-copy", scope,
+                                        rate_limit=src["rate_limit"], budget_usd=src.get("budget_usd"),
+                                        note=src.get("note"))
+        _event("token_created", {"id": row["id"], "label": row["label"], "scope": scope})
+        return {"token": plain, "id": row["id"], "label": row["label"], "scope": scope,
+                "note": "shown once — store it now"}
 
     @app.post("/admin/tokens/revoke-expired")
     async def revoke_expired_ep(authorization: str | None = Header(None),

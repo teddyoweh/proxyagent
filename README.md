@@ -79,8 +79,8 @@ copy-paste snippets pre-filled with your host). Reveal the admin token with
   bad key the moment you add it. **Disable** pauses a credential (it drops out of the failover
   pool) without deleting it, so you can re-enable later.
 - **Machine tokens** — mint (scoped / TTL / budget / note / IP allow-list), **search** (by
-  label/id/scope), **edit** (retune scope / rate / budget in place, no re-mint), revoke, and
-  **revoke-expired** (one-click cleanup). Minting shows a ready-to-run sample curl + copy-`.env`.
+  label/id/scope), **edit** (retune in place, no re-mint), **clone** (duplicate config, new
+  secret), revoke, and **revoke-expired** (one-click cleanup). Minting shows a sample curl + copy-`.env`.
 - **Model routing** — add/remove model remaps (e.g. `* → mock` for offline).
 - **Activity** — **spend-by-token** breakdown (requests · tokens · cost · budget %), a live
   request log with usage + cost, plus **Export CSV** and **Trim** of the audit trail.
@@ -202,7 +202,8 @@ dashboard's Activity tab shows the stat strip, a **14-day requests chart**, and 
 On a network fault the proxy fails over to the next credential in the pool; if they're all
 exhausted it returns a **clean `504`** (upstream timeout) or `502` (connection error) with a
 descriptive body — never a raw 500. Tune the upstream timeout with `PROXYAGENT_REQUEST_TIMEOUT`.
-Cap request size with `PROXYAGENT_MAX_BODY_BYTES` (over → `413`; 0 = unlimited). The dashboard's
+Cap request size with `PROXYAGENT_MAX_BODY_BYTES` (over → `413`; 0 = unlimited). Cap in-flight
+proxied requests with `PROXYAGENT_MAX_CONCURRENCY` (over → `503`; 0 = unlimited) to shield upstreams. The dashboard's
 **Test all** button (and `Admin.test_all_credentials()`) health-sweeps every stored credential
 concurrently and reports ok / auth-failed / unreachable per credential. Responses are **gzip**-
 compressed when the client accepts it (e.g. model lists / audit logs shrink ~75%), and the

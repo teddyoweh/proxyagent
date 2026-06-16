@@ -59,6 +59,39 @@ def test_admin_requires_auth():
     assert c.get("/admin/tokens", headers=ADMIN).status_code == 200
 
 
+def test_max_concurrency_503(monkeypatch):
+    monkeypatch.setenv("PROXYAGENT_MAX_CONCURRENCY", "1")
+    c = _client()
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    body = {"model": "mock", "max_tokens": 5, "messages": [{"role": "user", "content": "hi"}]}
+    # normally fine
+    assert c.post("/anthropic/v1/messages", headers={"x-api-key": tok}, json=body).status_code == 200
+    # simulate a request already in flight → next one is rejected with 503
+    c.app.state.inflight["n"] = 1
+    r = c.post("/anthropic/v1/messages", headers={"x-api-key": tok}, json=body)
+    assert r.status_code == 503 and "capacity" in r.json()["detail"]
+    # counter restored after the rejected request (it never incremented past the cap)
+    c.app.state.inflight["n"] = 0
+    assert c.post("/anthropic/v1/messages", headers={"x-api-key": tok}, json=body).status_code == 200
+    assert c.app.state.inflight["n"] == 0   # decremented cleanly
+
+
+def test_token_clone():
+    c = _client()
+    src = c.post("/admin/tokens", headers=ADMIN,
+                 json={"scope": ["anthropic:*"], "label": "prod", "budget_usd": 9.0,
+                       "rate_limit": 30, "note": "primary"}).json()
+    cl = c.post(f"/admin/tokens/{src['id']}/clone", headers=ADMIN).json()
+    assert cl["token"].startswith("pa_") and cl["token"] != src["token"]
+    assert cl["scope"] == ["anthropic:*"]
+    # the clone carried over the config (new id, copied scope/budget/rate/note)
+    toks = {t["id"]: t for t in c.get("/admin/tokens", headers=ADMIN).json()["tokens"]}
+    new = toks[cl["id"]]
+    assert new["budget_usd"] == 9.0 and new["rate_limit"] == 30 and new["note"] == "primary"
+    assert new["label"] == "prod-copy" and new["id"] != src["id"]
+    assert c.post("/admin/tokens/key_nope/clone", headers=ADMIN).status_code == 404
+
+
 def test_revoke_expired_and_note():
     from proxyagent.store import now_ms
     c = _client()
