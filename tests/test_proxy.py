@@ -291,3 +291,18 @@ def test_response_cache():
         assert r3.headers.get("x-proxyagent-cache") is None                              # bypass forces a miss
     finally:
         os.environ.pop("PROXYAGENT_CACHE_TTL", None)
+
+
+def test_provider_rate_limit():
+    import os
+    os.environ["PROXYAGENT_PROVIDER_RATE_LIMITS"] = '{"anthropic": 1}'
+    try:
+        c = _client()
+        tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+        body = {"model": "mock", "messages": [{"role": "user", "content": "hi"}]}
+        assert c.post("/anthropic/v1/messages", headers={"x-api-key": tok}, json=body).status_code == 200
+        assert c.post("/anthropic/v1/messages", headers={"x-api-key": tok}, json=body).status_code == 429
+        # a different provider is unaffected
+        assert c.post("/openai/v1/chat/completions", headers={"x-api-key": tok}, json=body).status_code == 200
+    finally:
+        os.environ.pop("PROXYAGENT_PROVIDER_RATE_LIMITS", None)

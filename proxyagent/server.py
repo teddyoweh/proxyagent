@@ -15,7 +15,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Str
 from pydantic import BaseModel
 
 from . import aliases, cache, crypto
-from .config import AUTH_LABELS, AUTH_READY, CATALOG, HARNESSES, Config, PROVIDERS
+from .config import (AUTH_LABELS, AUTH_READY, CATALOG, HARNESSES, Config, PROVIDERS,
+                     provider_rate_limit)
 from .providers import forward, scope_allows
 from .security import token_matches
 from .store import Store, now_ms
@@ -101,6 +102,10 @@ def create_app(config: Config | None = None) -> FastAPI:
         scope = _json.loads(token["scope_json"])
         if not scope_allows(scope, provider, model):
             raise HTTPException(403, f"token scope does not allow {provider}:{model}")
+
+        rl = provider_rate_limit(provider)
+        if rl and store.recent_provider_count(provider) >= rl:
+            raise HTTPException(429, f"rate limit for provider '{provider}' exceeded ({rl}/min)")
 
         used_tools: list[str] = []
         if request.headers.get("x-proxyagent-tools", "").lower() in ("1", "on", "true"):

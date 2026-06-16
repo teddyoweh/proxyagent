@@ -97,6 +97,12 @@ class Store:
             (tid, now_ms() - window_ms))
         return (r or {}).get("c", 0)
 
+    def recent_provider_count(self, provider, window_ms=60_000):
+        r = self.db.fetchone(
+            "SELECT COUNT(*) c FROM proxy_agent_calls WHERE provider=? AND ts_ms>=?",
+            (provider, now_ms() - window_ms))
+        return (r or {}).get("c", 0)
+
     # -- provider credentials (proxy_agent_keys) --------------------------- #
 
     def add_credential(self, provider, secret, *, kind="api_key", refresh=None,

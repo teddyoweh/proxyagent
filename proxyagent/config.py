@@ -6,9 +6,27 @@ place they live.
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+
+
+def provider_rate_limit(provider: str) -> int:
+    """Max requests/min for a provider (0 = unlimited). From PROXYAGENT_PROVIDER_RATE_LIMITS
+    (JSON {provider: rpm}) with a PROXYAGENT_RATE_LIMIT_DEFAULT fallback."""
+    raw = os.environ.get("PROXYAGENT_PROVIDER_RATE_LIMITS")
+    if raw:
+        try:
+            m = json.loads(raw)
+            if provider in m:
+                return int(m[provider])
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        return int(os.environ.get("PROXYAGENT_RATE_LIMIT_DEFAULT", "0") or 0)
+    except ValueError:
+        return 0
 
 from .security import hash_token, new_token, ADMIN_PREFIX
 

@@ -123,6 +123,14 @@ A `Dockerfile` (with a `/healthz` HEALTHCHECK) and `docker-compose.yml` (proxy +
 persistent volume) ship in the repo. Bring keys via a `.env` file. Verified: container builds,
 `/healthz` green, mock call + dashboard serve.
 
+## Rate limits
+Per-token limits (mint with `--rate`) and **per-provider** limits protect your upstreams:
+```bash
+export PROXYAGENT_PROVIDER_RATE_LIMITS='{"anthropic": 600, "openai": 1000}'   # requests/min
+export PROXYAGENT_RATE_LIMIT_DEFAULT=300                                        # fallback for the rest
+```
+Over the limit → `429`.
+
 ## Response cache
 Off by default. Set `PROXYAGENT_CACHE_TTL=<seconds>` and identical (provider + body) non-streaming
 requests are served from memory — saving upstream cost + latency. Cache hits return
