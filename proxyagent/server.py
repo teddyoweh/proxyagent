@@ -34,6 +34,7 @@ class TokenBody(BaseModel):
     rate_limit: int = 0
     budget_usd: float | None = None
     allowed_ips: list[str] | None = None      # CIDRs; requests from outside → 403
+    note: str | None = None
 
 
 class TokenPatch(BaseModel):
@@ -341,7 +342,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         require_admin(authorization, x_admin_token)
         plain, row = store.create_token(body.label, body.scope, ttl_seconds=body.ttl_seconds,
                                         rate_limit=body.rate_limit, budget_usd=body.budget_usd,
-                                        allowed_ips=body.allowed_ips)
+                                        allowed_ips=body.allowed_ips, note=body.note)
         _event("token_created", {"id": row["id"], "label": row["label"], "scope": body.scope})
         return {"token": plain, "id": row["id"], "label": row["label"],
                 "scope": body.scope, "budget_usd": body.budget_usd, "note": "shown once — store it now"}
@@ -358,12 +359,20 @@ def create_app(config: Config | None = None) -> FastAPI:
                         "last_used_ms": t["last_used_ms"], "budget_usd": t.get("budget_usd"),
                         "spent_usd": round(store.token_spend(t["id"]), 6),
                         "requests": store.token_request_count(t["id"]),
-                        "allowed_ips": _json.loads(t["allowed_ips"]) if t.get("allowed_ips") else None})
+                        "allowed_ips": _json.loads(t["allowed_ips"]) if t.get("allowed_ips") else None,
+                        "note": t.get("note")})
         if q:
             ql = q.lower()
             out = [t for t in out if ql in (t["label"] or "").lower() or ql in t["id"].lower()
                    or any(ql in s.lower() for s in t["scope"])]
         return {"tokens": out}
+
+    @app.post("/admin/tokens/revoke-expired")
+    async def revoke_expired_ep(authorization: str | None = Header(None),
+                                x_admin_token: str | None = Header(None)):
+        """Revoke all tokens whose TTL has passed — a one-click cleanup."""
+        require_admin(authorization, x_admin_token)
+        return {"revoked": store.revoke_expired()}
 
     @app.delete("/admin/tokens/{tid}")
     async def revoke_token_ep(tid: str, authorization: str | None = Header(None),

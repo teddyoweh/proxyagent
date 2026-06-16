@@ -59,6 +59,25 @@ def test_admin_requires_auth():
     assert c.get("/admin/tokens", headers=ADMIN).status_code == 200
 
 
+def test_revoke_expired_and_note():
+    from proxyagent.store import now_ms
+    c = _client()
+    store = c.app.state.store
+    # an already-expired token (force expiry into the past) + a live one
+    _, old = store.create_token("old", ["*"], ttl_seconds=60, note="temp key")
+    store.db.execute("UPDATE proxy_agent_tokens SET expires_ms=? WHERE id=?",
+                     (now_ms() - 1000, old["id"]))
+    _, live = store.create_token("live", ["*"])
+    r = c.post("/admin/tokens/revoke-expired", headers=ADMIN).json()
+    assert r["revoked"] == 1
+    toks = {t["id"]: t for t in c.get("/admin/tokens", headers=ADMIN).json()["tokens"]}
+    assert toks[old["id"]]["revoked"] is True and toks[live["id"]]["revoked"] is False
+    assert toks[old["id"]]["note"] == "temp key"   # note round-trips
+    # second sweep finds nothing
+    assert c.post("/admin/tokens/revoke-expired", headers=ADMIN).json()["revoked"] == 0
+    assert c.post("/admin/tokens/revoke-expired").status_code == 401
+
+
 def test_token_ip_allowlist():
     """A token restricted to a CIDR rejects requests from outside it (via X-Forwarded-For)."""
     c = _client()

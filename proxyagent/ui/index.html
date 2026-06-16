@@ -105,11 +105,12 @@
           <input id="tk_scope" placeholder="scope: * or anthropic:claude-*" style="flex:1"/>
           <input id="tk_ttl" type="number" placeholder="ttl (s)" style="width:100px"/>
           <input id="tk_budget" type="number" step="0.01" placeholder="budget $" style="width:100px"/>
+          <input id="tk_note" placeholder="note (optional)" style="flex:1"/>
           <button onclick="mintToken()">Mint</button>
         </div>
         <div id="tk_out" class="tok hide"></div>
       </div>
-      <div style="margin-bottom:12px"><input id="tk_search" placeholder="Search tokens by label, id, or scope…" oninput="refreshTokens()" style="max-width:360px"/></div>
+      <div class="row" style="margin-bottom:12px;gap:8px"><input id="tk_search" placeholder="Search tokens by label, id, or scope…" oninput="refreshTokens()" style="max-width:360px"/><button class="ghost sm" onclick="revokeExpired()">Revoke expired</button></div>
       <div class="card"><table><thead><tr><th>ID</th><th>Label</th><th>Token</th><th>Scope</th><th>Reqs</th><th>Budget</th><th>Last used</th><th>Expires</th><th>Status</th><th></th></tr></thead><tbody id="toks"></tbody></table></div>
     </section>
 
@@ -274,7 +275,7 @@ async function createKey(){if(await submitCred("cf",cfProvider))closeCreate()}
 
 async function refreshTokens(){const q=val("tk_search");const d=await(await api("/admin/tokens"+(q?"?q="+encodeURIComponent(q):""))).json();
   document.getElementById("toks").innerHTML=d.tokens.map(t=>`<tr><td class="mono">${t.id}</td><td>${t.label||""}</td><td class="mono">${t.masked||""}</td><td class="mono">${(t.scope||[]).join(", ")}</td><td>${t.requests??0}</td><td class="mono">${t.budget_usd?('$'+(t.spent_usd||0).toFixed(4)+' / $'+(+t.budget_usd).toFixed(2)):'—'}</td><td class="muted" style="font-size:12px">${rel(t.last_used_ms)}</td><td class="muted" style="font-size:12px">${ttl(t.expires_ms)}</td><td>${t.revoked?'<span class="pill no">revoked</span>':(t.expires_ms&&t.expires_ms<Date.now()?'<span class="pill no">expired</span>':'<span class="pill ok">active</span>')}</td><td>${t.revoked?"":`<button class="ghost sm" onclick="editTok('${t.id}')">edit</button> <button class="danger sm" onclick="revokeTok('${t.id}')">revoke</button>`}</td></tr>`).join("")}
-async function mintToken(){const body={label:val("tk_label")||"machine",scope:(val("tk_scope")||"*").split(",").map(s=>s.trim()),ttl_seconds:parseInt(val("tk_ttl"))||null,budget_usd:parseFloat(val("tk_budget"))||null};
+async function mintToken(){const body={label:val("tk_label")||"machine",scope:(val("tk_scope")||"*").split(",").map(s=>s.trim()),ttl_seconds:parseInt(val("tk_ttl"))||null,budget_usd:parseFloat(val("tk_budget"))||null,note:val("tk_note")||null};
   const d=await(await api("/admin/tokens",{method:"POST",body:JSON.stringify(body)})).json();
   const base=location.origin;
   const curl=`curl ${base}/anthropic/v1/messages \\\n  -H "x-api-key: ${d.token}" \\\n  -d '{"model":"mock","max_tokens":50,"messages":[{"role":"user","content":"hi"}]}'`;
@@ -282,6 +283,7 @@ async function mintToken(){const body={label:val("tk_label")||"machine",scope:(v
   const el=document.getElementById("tk_out");el.classList.remove("hide");
   el.innerHTML=`<b>Token (shown once):</b> <button class="ghost sm" onclick="navigator.clipboard.writeText('${d.token}');this.textContent='copied'">copy</button><br/><span class="mono">${d.token}</span><div style="margin-top:12px"><b>Sample request</b> <button class="ghost sm" onclick='navigator.clipboard.writeText(${JSON.stringify(curl)});this.textContent="copied"'>copy curl</button> <button class="ghost sm" onclick='navigator.clipboard.writeText(${JSON.stringify(env)});this.textContent="copied"'>copy .env</button><pre class="mono" style="margin:6px 0 0;padding:10px;background:rgba(127,127,127,.08);border-radius:8px;overflow:auto;font-size:12px;white-space:pre-wrap">${curl.replace(/</g,"&lt;")}</pre></div>`;refreshTokens()}
 async function revokeTok(id){await api("/admin/tokens/"+id,{method:"DELETE"});refreshTokens()}
+async function revokeExpired(){const d=await(await api("/admin/tokens/revoke-expired",{method:"POST"})).json();alert(`Revoked ${d.revoked} expired token(s).`);refreshTokens()}
 async function editTok(id){const t=(await(await api("/admin/tokens")).json()).tokens.find(x=>x.id===id);if(!t)return;
   const scope=prompt("Scope (comma-separated globs, e.g. anthropic:claude-*):",(t.scope||[]).join(", "));if(scope===null)return;
   const rate=prompt("Rate limit (requests/min, 0 = unlimited):",t.rate_limit||0);if(rate===null)return;

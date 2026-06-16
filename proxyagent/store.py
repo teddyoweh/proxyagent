@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS proxy_agent_tokens (
     id TEXT PRIMARY KEY, hash TEXT NOT NULL UNIQUE, label TEXT,
     scope_json TEXT NOT NULL DEFAULT '["*"]', rate_limit INTEGER NOT NULL DEFAULT 0,
     created_ms BIGINT, expires_ms BIGINT, revoked INTEGER NOT NULL DEFAULT 0,
-    last_used_ms BIGINT, masked TEXT, budget_usd DOUBLE PRECISION, allowed_ips TEXT
+    last_used_ms BIGINT, masked TEXT, budget_usd DOUBLE PRECISION, allowed_ips TEXT, note TEXT
 );
 CREATE TABLE IF NOT EXISTS proxy_agent_keys (
     id TEXT PRIMARY KEY, provider TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'api_key',
@@ -51,6 +51,7 @@ class Store:
         # migrate older DBs created before budget_usd existed
         for stmt in ("ALTER TABLE proxy_agent_tokens ADD COLUMN budget_usd DOUBLE PRECISION",
                      "ALTER TABLE proxy_agent_tokens ADD COLUMN allowed_ips TEXT",
+                     "ALTER TABLE proxy_agent_tokens ADD COLUMN note TEXT",
                      "ALTER TABLE proxy_agent_keys ADD COLUMN masked TEXT",
                      "ALTER TABLE proxy_agent_calls ADD COLUMN request_id TEXT"):
             try:
@@ -61,17 +62,17 @@ class Store:
     # -- machine tokens ---------------------------------------------------- #
 
     def create_token(self, label, scope, *, ttl_seconds=None, rate_limit=0, budget_usd=None,
-                     allowed_ips=None):
+                     allowed_ips=None, note=None):
         plain = new_token()
         tid = "tok_" + uuid.uuid4().hex[:12]
         expires = now_ms() + ttl_seconds * 1000 if ttl_seconds else None
         self.db.execute(
             """INSERT INTO proxy_agent_tokens
                (id, hash, label, scope_json, rate_limit, created_ms, expires_ms, masked,
-                budget_usd, allowed_ips)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                budget_usd, allowed_ips, note)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (tid, hash_token(plain), label, json.dumps(scope), rate_limit, now_ms(),
-             expires, mask(plain), budget_usd, json.dumps(allowed_ips) if allowed_ips else None),
+             expires, mask(plain), budget_usd, json.dumps(allowed_ips) if allowed_ips else None, note),
         )
         return plain, self.get_token(tid)
 
@@ -97,6 +98,13 @@ class Store:
     def revoke_token(self, tid):
         cur = self.db.execute("UPDATE proxy_agent_tokens SET revoked=1 WHERE id=?", (tid,))
         return cur.rowcount > 0
+
+    def revoke_expired(self) -> int:
+        """Revoke every still-active token whose TTL has passed. Returns how many."""
+        cur = self.db.execute(
+            "UPDATE proxy_agent_tokens SET revoked=1 "
+            "WHERE revoked=0 AND expires_ms IS NOT NULL AND expires_ms < ?", (now_ms(),))
+        return cur.rowcount
 
     def update_token(self, tid, *, scope=None, rate_limit=None, budget_usd=None):
         """Retune a token in place — scope, rate limit, and/or budget — without re-minting.
