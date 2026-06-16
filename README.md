@@ -131,9 +131,9 @@ proxyagent logs-export -o audit.csv    # dump the audit trail to CSV
 proxyagent logs-trim 30       # delete traces older than 30 days
 ```
 
-**Per-token spend & audit retention.** See exactly which machine token is costing what
-(`GET /admin/usage-by-token`, surfaced in the dashboard's Activity tab). Keep the audit
-table bounded and exportable:
+**Per-token & per-model spend.** See exactly which machine token *and* which model is costing
+what (`GET /admin/usage-by-token`, `GET /admin/usage-by-model`, both surfaced side-by-side in the
+dashboard's Activity tab). Keep the audit table bounded and exportable:
 
 ```bash
 export PROXYAGENT_LOG_RETENTION_DAYS=30        # trim traces older than 30d on startup

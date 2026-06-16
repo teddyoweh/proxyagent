@@ -330,6 +330,18 @@ def test_oauth_refresh_helpers():
     assert c["secret"] == "new-tok" and (c["meta"] or {}).get("expires_ms") == 999999999999
 
 
+def test_usage_by_model_breakdown():
+    c = _client()
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    for m in ("mock-a", "mock-a", "mock-b"):
+        c.post("/anthropic/v1/messages", headers={"x-api-key": tok},
+               json={"model": m, "max_tokens": 10, "messages": [{"role": "user", "content": "hi"}]})
+    rows = {r["model"]: r for r in c.get("/admin/usage-by-model", headers=ADMIN).json()["models"]}
+    assert rows["mock-a"]["requests"] == 2 and rows["mock-b"]["requests"] == 1
+    assert rows["mock-a"]["provider"] == "anthropic"
+    assert c.get("/admin/usage-by-model").status_code == 401
+
+
 def test_request_id_echo_and_logged():
     c = _client()
     tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]

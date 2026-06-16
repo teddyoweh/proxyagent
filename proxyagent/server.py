@@ -287,6 +287,17 @@ def create_app(config: Config | None = None) -> FastAPI:
                 "tools": tools.list(), "backend": store.backend,
                 "encryption": crypto.encryption_available()}
 
+    @app.get("/admin/usage-by-model")
+    async def usage_by_model_ep(authorization: str | None = Header(None),
+                                x_admin_token: str | None = Header(None)):
+        """Per-model usage breakdown — which model is driving requests + spend."""
+        require_admin(authorization, x_admin_token)
+        rows = [{"provider": r["provider"], "model": r["model"], "requests": r["requests"],
+                 "prompt_tokens": r["prompt_tokens"], "completion_tokens": r["completion_tokens"],
+                 "cost_usd": round(float(r.get("cost_usd") or 0), 6)}
+                for r in store.usage_by_model()]
+        return {"models": rows}
+
     @app.get("/admin/usage-by-token")
     async def usage_by_token_ep(authorization: str | None = Header(None),
                                 x_admin_token: str | None = Header(None)):

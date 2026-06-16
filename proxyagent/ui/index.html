@@ -117,14 +117,29 @@
           <button onclick="setAlias()">Map</button>
         </div>
         <p class="muted" style="margin:10px 0 0">Tip: map <code>* → mock</code> to run any agent fully offline (no keys).</p>
+        <div class="row" style="margin-top:12px;gap:8px;flex-wrap:wrap">
+          <span class="label" style="margin:0;align-self:center">Presets</span>
+          <button class="ghost sm" onclick="preset('*','mock')">Everything → mock (offline)</button>
+          <button class="ghost sm" onclick="preset('gpt-4o','anthropic:claude-sonnet-4-5')">gpt-4o → Claude</button>
+          <button class="ghost sm" onclick="preset('gpt-4o-mini','anthropic:claude-3-5-haiku')">gpt-4o-mini → Haiku</button>
+          <button class="ghost sm" onclick="clearAliases()">Clear all</button>
+        </div>
       </div>
       <div class="card"><table><thead><tr><th>Match</th><th>→ Target</th><th></th></tr></thead><tbody id="aliases"></tbody></table></div>
     </section>
 
     <section id="t_activity" class="hide">
       <div class="h"><h2>Activity</h2><div class="row" style="gap:8px"><button class="ghost sm" onclick="exportLogs()">Export CSV</button><button class="ghost sm" onclick="trimLogs()">Trim &gt;30d</button></div></div>
-      <div class="label" style="margin-bottom:8px">Spend by token</div>
-      <div class="card" style="margin-bottom:16px"><table><thead><tr><th>Token</th><th>Requests</th><th>In</th><th>Out</th><th>Cost</th><th>Budget</th></tr></thead><tbody id="spend"></tbody></table></div>
+      <div class="row" style="gap:16px;align-items:flex-start">
+        <div style="flex:1;min-width:0">
+          <div class="label" style="margin-bottom:8px">Spend by token</div>
+          <div class="card" style="margin-bottom:16px"><table><thead><tr><th>Token</th><th>Reqs</th><th>In</th><th>Out</th><th>Cost</th><th>Budget</th></tr></thead><tbody id="spend"></tbody></table></div>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div class="label" style="margin-bottom:8px">Spend by model</div>
+          <div class="card" style="margin-bottom:16px"><table><thead><tr><th>Model</th><th>Reqs</th><th>In</th><th>Out</th><th>Cost</th></tr></thead><tbody id="spendm"></tbody></table></div>
+        </div>
+      </div>
       <div class="label" style="margin-bottom:8px">Live requests</div>
       <div class="card"><table><thead><tr><th>Time</th><th>Token</th><th>Provider</th><th>Model</th><th>Status</th><th>In</th><th>Out</th><th>Cost</th><th>ms</th></tr></thead><tbody id="logs"></tbody></table></div>
     </section>
@@ -246,6 +261,8 @@ async function refreshAliases(){const m=(await(await api("/admin/aliases")).json
   document.getElementById("aliases").innerHTML=Object.entries(m).map(([k,v])=>`<tr><td class="mono">${k}</td><td class="mono">${v}</td><td><button class="danger sm" onclick="rmAlias('${k}')">remove</button></td></tr>`).join("")||'<tr><td class="muted" colspan="3">No model routes.</td></tr>'}
 async function setAlias(){const m=(await(await api("/admin/aliases")).json()).map;m[val("al_match")||"*"]=val("al_target")||"mock";await api("/admin/aliases",{method:"PUT",body:JSON.stringify({map:m})});document.getElementById("al_match").value="";document.getElementById("al_target").value="";refreshAliases()}
 async function rmAlias(k){const m=(await(await api("/admin/aliases")).json()).map;delete m[k];await api("/admin/aliases",{method:"PUT",body:JSON.stringify({map:m})});refreshAliases()}
+async function preset(match,target){const m=(await(await api("/admin/aliases")).json()).map;m[match]=target;await api("/admin/aliases",{method:"PUT",body:JSON.stringify({map:m})});refreshAliases()}
+async function clearAliases(){if(!confirm("Remove all model routes?"))return;await api("/admin/aliases",{method:"PUT",body:JSON.stringify({map:{}})});refreshAliases()}
 
 async function refreshLogs(){const d=await(await api("/admin/logs?limit=80")).json();
   document.getElementById("logs").innerHTML=d.logs.map(g=>`<tr><td class="mono">${new Date(g.ts_ms).toLocaleTimeString()}</td><td>${g.token_label||""}</td><td>${g.provider||""}</td><td class="mono">${(g.model||"").slice(0,24)}</td><td>${g.status||""}</td><td>${g.prompt_tokens??"-"}</td><td>${g.completion_tokens??"-"}</td><td>${g.cost_usd?"$"+g.cost_usd.toFixed(4):"-"}</td><td>${g.latency_ms||""}</td></tr>`).join("");refreshSpend()}
@@ -253,7 +270,9 @@ async function refreshSpend(){const d=await(await api("/admin/usage-by-token")).
   const rows=d.tokens.filter(t=>t.requests>0);
   document.getElementById("spend").innerHTML=rows.map(t=>{
     const bud=t.budget_usd?`$${t.cost_usd.toFixed(4)} / $${(+t.budget_usd).toFixed(2)}${t.budget_pct!=null?` <span class="muted">(${t.budget_pct}%)</span>`:""}`:'—';
-    return `<tr><td>${t.label||""} <span class="mono muted">${t.masked||""}</span>${t.revoked?' <span class="pill no">revoked</span>':''}</td><td>${t.requests}</td><td>${t.prompt_tokens}</td><td>${t.completion_tokens}</td><td class="mono">$${t.cost_usd.toFixed(4)}</td><td class="mono">${bud}</td></tr>`}).join("")||'<tr><td class="muted" colspan="6">No spend yet.</td></tr>'}
+    return `<tr><td>${t.label||""} <span class="mono muted">${t.masked||""}</span>${t.revoked?' <span class="pill no">revoked</span>':''}</td><td>${t.requests}</td><td>${t.prompt_tokens}</td><td>${t.completion_tokens}</td><td class="mono">$${t.cost_usd.toFixed(4)}</td><td class="mono">${bud}</td></tr>`}).join("")||'<tr><td class="muted" colspan="6">No spend yet.</td></tr>';refreshModels()}
+async function refreshModels(){const d=await(await api("/admin/usage-by-model")).json();
+  document.getElementById("spendm").innerHTML=d.models.map(m=>`<tr><td class="mono">${m.provider||""}:${(m.model||"").slice(0,20)}</td><td>${m.requests}</td><td>${m.prompt_tokens}</td><td>${m.completion_tokens}</td><td class="mono">$${m.cost_usd.toFixed(4)}</td></tr>`).join("")||'<tr><td class="muted" colspan="5">No spend yet.</td></tr>'}
 async function exportLogs(){const r=await api("/admin/logs/export");const blob=await r.blob();const u=URL.createObjectURL(blob);const a=document.createElement("a");a.href=u;a.download="proxyagent-audit.csv";a.click();URL.revokeObjectURL(u)}
 async function trimLogs(){if(!confirm("Delete call traces older than 30 days?"))return;const d=await(await api("/admin/logs/trim?days=30",{method:"POST"})).json();alert(`Trimmed ${d.deleted} trace(s).`);refreshLogs()}
 

@@ -16,7 +16,7 @@ from typing import Optional
 
 from .harness import run  # noqa: F401  (the headline SDK call)
 
-__version__ = "0.22.0"
+__version__ = "0.23.0"
 __all__ = ["run", "serve", "create_app", "Config", "Admin", "__version__"]
 
 
@@ -83,6 +83,10 @@ class Admin:
     def usage_by_token(self) -> list:
         """Per-token spend breakdown — which machine token is costing what."""
         return self._c.get("/admin/usage-by-token").json()["tokens"]
+
+    def usage_by_model(self) -> list:
+        """Per-model usage breakdown — which model is driving requests + spend."""
+        return self._c.get("/admin/usage-by-model").json()["models"]
 
     def export_logs(self, limit: int = 100_000) -> str:
         """The audit trail as CSV text (for SIEM / archival)."""

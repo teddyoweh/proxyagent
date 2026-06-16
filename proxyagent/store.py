@@ -217,6 +217,21 @@ class Store:
                ORDER BY cost_usd DESC""")
         return [dict(r) for r in rows]
 
+    def usage_by_model(self):
+        """Per-model usage — requests, tokens, cost — grouped by provider:model. So you can
+        see which model is driving spend, not just which token."""
+        rows = self.db.fetchall(
+            """SELECT provider, model,
+                      COUNT(*) requests,
+                      COALESCE(SUM(prompt_tokens),0) prompt_tokens,
+                      COALESCE(SUM(completion_tokens),0) completion_tokens,
+                      COALESCE(SUM(cost_usd),0) cost_usd
+               FROM proxy_agent_calls
+               WHERE model IS NOT NULL
+               GROUP BY provider, model
+               ORDER BY cost_usd DESC, requests DESC""")
+        return [dict(r) for r in rows]
+
     def usage_summary(self):
         r = self.db.fetchone(
             """SELECT COUNT(*) requests,
