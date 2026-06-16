@@ -75,6 +75,29 @@ def test_mint_and_use_scope_enforcement():
     assert r3.status_code == 401
 
 
+def test_cors_preflight_and_headers(monkeypatch):
+    monkeypatch.setenv("PROXYAGENT_CORS_ORIGINS", "https://app.example.com")
+    c = _client()
+    # OPTIONS preflight is answered with the allow-origin
+    pre = c.options("/anthropic/v1/messages",
+                    headers={"Origin": "https://app.example.com",
+                             "Access-Control-Request-Method": "POST"})
+    assert pre.headers.get("access-control-allow-origin") == "https://app.example.com"
+    # an actual request echoes the allow-origin + exposes the proxy headers
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    r = c.post("/anthropic/v1/messages",
+               headers={"x-api-key": tok, "Origin": "https://app.example.com"},
+               json={"model": "mock", "max_tokens": 5, "messages": [{"role": "user", "content": "hi"}]})
+    assert r.headers.get("access-control-allow-origin") == "https://app.example.com"
+    assert "x-proxyagent-request-id" in r.headers.get("access-control-expose-headers", "")
+
+
+def test_cors_off_by_default():
+    c = _client()
+    r = c.get("/healthz", headers={"Origin": "https://evil.example.com"})
+    assert "access-control-allow-origin" not in r.headers
+
+
 def test_healthz_and_ui():
     c = _client()
     assert c.get("/healthz").json()["ok"] is True

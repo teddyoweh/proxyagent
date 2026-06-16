@@ -59,6 +59,16 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.state.tools = tools
     started_at = time.time()
 
+    # Optional CORS — so browser-based agents/dashboards can call the proxy. Off unless
+    # PROXYAGENT_CORS_ORIGINS is set (comma-separated origins, or "*"). Handles OPTIONS preflight.
+    _cors = os.environ.get("PROXYAGENT_CORS_ORIGINS")
+    if _cors:
+        from fastapi.middleware.cors import CORSMiddleware
+        origins = ["*"] if _cors.strip() == "*" else [o.strip() for o in _cors.split(",") if o.strip()]
+        app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["*"],
+                           allow_headers=["*"], expose_headers=["x-proxyagent-request-id",
+                           "x-proxyagent-tool-steps", "x-proxyagent-cache"])
+
     # Audit-log retention — trim call traces older than PROXYAGENT_LOG_RETENTION_DAYS
     # on startup so an always-on proxy never grows the log table without bound.
     import os as _os

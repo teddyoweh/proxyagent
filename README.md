@@ -198,6 +198,14 @@ Cap request size with `PROXYAGENT_MAX_BODY_BYTES` (over → `413`; 0 = unlimited
 **Test all** button (and `Admin.test_all_credentials()`) health-sweeps every stored credential
 concurrently and reports ok / auth-failed / unreachable per credential.
 
+## Browser clients (CORS)
+Off by default. Set `PROXYAGENT_CORS_ORIGINS` to a comma-separated allowlist (or `*`) and the
+proxy answers OPTIONS preflight + echoes `Access-Control-Allow-Origin`, exposing the
+`x-proxyagent-*` headers — so a browser-based agent or dashboard can call it directly.
+```bash
+export PROXYAGENT_CORS_ORIGINS="https://app.you.com,https://staging.you.com"
+```
+
 ## Security model
 - **Real keys never leave the proxy** — read from env, never persisted, never logged, never returned.
 - **Machine tokens are stored hashed** (SHA-256); plaintext shown once. A stolen DB yields nothing usable.
