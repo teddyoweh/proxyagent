@@ -96,6 +96,7 @@ def _http_tool(spec: dict) -> Tool:
 class ToolRegistry:
     def __init__(self, config=None):
         self._tools: dict[str, Tool] = {}
+        self._counts: dict[str, int] = {}
         # web_search is on by default unless explicitly disabled.
         if os.environ.get("PROXYAGENT_DISABLE_WEB_SEARCH") != "1":
             self.register(WEB_SEARCH)
@@ -138,7 +139,12 @@ class ToolRegistry:
         tool = self._tools.get(name)
         if not tool:
             return f"error: unknown tool '{name}'"
+        self._counts[name] = self._counts.get(name, 0) + 1
         return await tool.executor(args)
+
+    def counts(self) -> dict[str, int]:
+        """How many times each managed tool has been executed (since start)."""
+        return dict(self._counts)
 
     def manages(self, name: str) -> bool:
         return name in self._tools

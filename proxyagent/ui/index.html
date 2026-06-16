@@ -174,7 +174,9 @@ function rel(ms){if(!ms)return"never";const s=Math.max(0,(Date.now()-ms)/1000);i
 function ttl(ms){if(!ms)return"never";const s=(ms-Date.now())/1000;if(s<=0)return"expired";if(s<60)return"in "+Math.floor(s)+"s";if(s<3600)return"in "+Math.floor(s/60)+"m";if(s<86400)return"in "+Math.floor(s/3600)+"h";return"in "+Math.floor(s/86400)+"d"}
 function saveAdmin(){const v=document.getElementById("admintok").value.trim();if(v){localStorage.setItem("pa_admin",v);boot()}}
 function logout(){localStorage.removeItem("pa_admin");document.getElementById("app").classList.add("hide");document.getElementById("gate").classList.remove("hide")}
-function nav(t){document.querySelectorAll(".navitem").forEach(e=>e.classList.toggle("on",e.dataset.t===t));["keys","tokens","models","activity"].forEach(s=>document.getElementById("t_"+s).classList.toggle("hide",s!==t))}
+let curTab="keys";
+function nav(t){curTab=t;document.querySelectorAll(".navitem").forEach(e=>e.classList.toggle("on",e.dataset.t===t));["keys","tokens","models","activity"].forEach(s=>document.getElementById("t_"+s).classList.toggle("hide",s!==t));refreshTab()}
+function refreshTab(){if(!A())return;({keys:refreshKeys,tokens:refreshTokens,models:refreshAliases,activity:refreshLogs}[curTab]||(()=>{}))()}
 
 const MARK={
   anthropic:'<path d="M9.6 3 3 21h4.1l1.2-3.5h5.9L15.4 21H20L13.4 3H9.6Zm-.4 10.5 1.9-5.4 2 5.4H9.2Z"/>',
@@ -312,6 +314,8 @@ async function trimLogs(){if(!confirm("Delete call traces older than 30 days?"))
 
 if(A())boot();
 setInterval(()=>{if(A()&&!document.getElementById("app").classList.contains("hide")){refreshLogs()}},4000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&A()&&!document.getElementById("app").classList.contains("hide"))refreshTab()});
+window.addEventListener("focus",()=>{if(A()&&!document.getElementById("app").classList.contains("hide"))refreshTab()});
 </script>
 </body>
 </html>

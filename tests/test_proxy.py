@@ -409,6 +409,20 @@ def test_usage_by_day_and_latency():
     assert c.get("/admin/usage-by-day").status_code == 401
 
 
+def test_tool_execution_counts():
+    """Executing a managed tool bumps a per-tool counter surfaced in /admin/stats."""
+    c = _client()
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    # web_search is registered by default; empty query returns early (no network) but still counts
+    for _ in range(2):
+        r = c.post("/v1/tools/web_search/execute", headers={"x-api-key": tok}, json={})
+        assert r.status_code == 200
+    stats = c.get("/admin/stats", headers=ADMIN).json()
+    assert stats["tool_calls"].get("web_search") == 2
+    # unknown tool → 404, not counted
+    assert c.post("/v1/tools/nope/execute", headers={"x-api-key": tok}, json={}).status_code == 404
+
+
 def test_admin_stats_summary():
     import proxyagent
     c = _client()

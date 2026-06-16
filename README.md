@@ -179,9 +179,10 @@ the CSV export), so a client log line ties straight to a row in the audit trail.
 ## Operational summary
 `GET /admin/stats` (or `proxyagent.Admin(...).stats()`) returns a one-shot snapshot — version,
 uptime, cache (enabled/ttl/hits/size), **latency p50/p95**, active+total tokens, credentials,
-configured providers, total requests and spend. `GET /admin/usage-by-day?days=14` returns a daily
-timeseries (requests/tokens/cost per UTC day). The dashboard's Activity tab shows the stat strip,
-a **14-day requests chart**, and each token's **expiry countdown**.
+configured providers, **per-tool execution counts**, total requests and spend. `GET
+/admin/usage-by-day?days=14` returns a daily timeseries (requests/tokens/cost per UTC day). The
+dashboard's Activity tab shows the stat strip, a **14-day requests chart**, and each token's
+**expiry countdown**, and **auto-refreshes** when you focus the tab.
 
 ## Observability — Prometheus
 `GET /metrics` exposes `proxyagent_requests_total`, `proxyagent_responses_total{status}`,

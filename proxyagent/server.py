@@ -383,6 +383,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             "backend": store.backend, "encryption": crypto.encryption_available(),
             "cache": {"enabled": cache.enabled(), "ttl_s": cs["ttl"], "hits": cs["hits"], "size": cs["size"]},
             "latency_ms": store.latency_percentiles(),
+            "tool_calls": tools.counts(),
             "tokens": {"active": sum(1 for t in toks if not t["revoked"]), "total": len(toks)},
             "credentials": m["credentials"], "providers": _configured(),
             "requests": m["total"]["requests"], "cost_usd": round(m["total"]["cost_usd"] or 0, 6),
