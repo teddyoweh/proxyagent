@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "proxyagent"
-version = "0.49.0"
+version = "0.49.1"
 description = "Run any agent (Claude, Codex, custom) on any machine — with no API key on the machine. A secure, self-hosted proxy for models and tools."
 readme = "README.md"
 requires-python = ">=3.10"

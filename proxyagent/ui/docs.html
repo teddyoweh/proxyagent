@@ -99,23 +99,31 @@ proxyagent provider add openai    --key sk-…
     <p>Or mint from the dashboard's <strong>Machine tokens</strong> tab (it shows a ready-to-run curl and a copy-<code>.env</code> snippet).</p>
 
     <h2 id="run">5 · Run an agent — token + prompt, that's it</h2>
-    <p>This is the whole point: hand the SDK a <strong>token</strong> and a <strong>prompt</strong>, and it runs a
-    real coding agent (Claude Code by default) on this machine against that prompt — with <strong>no API key
-    here</strong>. The agent's model calls route through the proxy, which holds the real key.</p>
+    <p>This is the whole point: hand the SDK a <strong>token</strong> and a <strong>prompt</strong>, and it launches a
+    real coding agent (the actual <strong>Claude Code</strong> / <strong>Codex</strong> CLI) on this machine against that
+    prompt — with <strong>no API key here</strong>. Every model call the agent makes routes through the proxy,
+    which holds the real key.</p>
     <pre><code><span class="cm"># pip install proxyagent — then:</span>
 import proxyagent
 proxyagent.run("build a SwiftUI todo app and run the tests",
                token="pa_…", proxy="__ORIGIN__")
 <span class="cm"># → launches Claude Code here, keyless. harness="codex" for Codex,</span>
 <span class="cm">#   command="my-agent {goal}" for any custom agent.</span></code></pre>
+    <h3>Supported agents (install the CLI you want)</h3>
+    <pre><code>npm i -g @anthropic-ai/claude-code     <span class="cm"># Claude Code  → harness="claude-code" (default)</span>
+npm i -g @openai/codex                  <span class="cm"># Codex        → harness="codex"   (or: brew install codex)</span></code></pre>
+    <p class="muted" style="font-size:13.5px">proxyagent drives the real CLI locally and wires it to the proxy
+    for you — Claude Code via <code>ANTHROPIC_BASE_URL</code>; Codex via a one-off model provider (it ignores
+    <code>OPENAI_BASE_URL</code>). Both are verified end-to-end: every call lands on the proxy, keyless.</p>
     <h3>From the CLI</h3>
-    <pre><code>PROXYAGENT_TOKEN=pa_… proxyagent run claude-code \
-  --goal "build a SwiftUI todo app" --proxy __ORIGIN__</code></pre>
-    <h3>Or just set the env and run the harness yourself</h3>
+    <pre><code>PROXYAGENT_TOKEN=pa_… proxyagent run codex \
+  --goal "fix the failing tests" --proxy __ORIGIN__
+PROXYAGENT_TOKEN=pa_… proxyagent run claude-code --goal "ship it" --proxy __ORIGIN__</code></pre>
+    <h3>Claude Code by hand (just env)</h3>
     <pre><code>export ANTHROPIC_BASE_URL=__ORIGIN__/anthropic
 export ANTHROPIC_API_KEY=pa_…        <span class="cm"># the machine token, NOT the real key</span>
 claude -p "ship it"
-<span class="cm"># Codex: export OPENAI_BASE_URL=__ORIGIN__/openai ; OPENAI_API_KEY=pa_…</span></code></pre>
+<span class="cm"># (Codex needs a model-provider override — just use `proxyagent run codex`.)</span></code></pre>
 
     <h2 id="sdk">SDK — manage the proxy programmatically</h2>
     <p>Mint tokens, manage credentials, and host the proxy from Python:</p>

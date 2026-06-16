@@ -52,19 +52,20 @@ proxyagent serve                        # prints an admin token + a dashboard at
 proxyagent token new macbook-01 --scope "anthropic:claude-*"   # local: no admin token needed
 ```
 
-**3. Run any agent on any machine — no real key there:**
-```bash
-PROXYAGENT_TOKEN=pa_… proxyagent run claude-code \
-  --goal "build a SwiftUI todo app" --proxy https://proxy.you.com
-# or:  proxyagent run codex --goal "fix the failing tests" --token pa_…
+**3. Run a real agent on any machine — no real key there.** Token + prompt, it just runs the
+actual Claude Code / Codex CLI locally, routing every model call through the proxy:
+```python
+import proxyagent
+proxyagent.run("build a SwiftUI todo app and run the tests",
+               token="pa_…", proxy="https://proxy.you.com")   # harness="codex" for Codex
 ```
-
-Or use any harness directly — just set the env and the proxy does the rest:
 ```bash
-export ANTHROPIC_BASE_URL=https://proxy.you.com/anthropic
-export ANTHROPIC_API_KEY=pa_…          # the machine token, not the real key
-claude -p "ship it"
+# same from the CLI:
+PROXYAGENT_TOKEN=pa_… proxyagent run codex --goal "fix the failing tests" --proxy https://proxy.you.com
 ```
+Install the agent CLI you want first: `npm i -g @anthropic-ai/claude-code` or `npm i -g @openai/codex`.
+proxyagent wires each one to the proxy automatically (Claude Code via `ANTHROPIC_BASE_URL`; Codex via a
+one-off model provider). Both are verified end-to-end — every call lands on the proxy, keyless.
 
 ## The dashboard & docs
 `proxyagent serve` ships a dashboard at `/` and a full **"how to run it" docs page at `/docs`**
@@ -249,20 +250,25 @@ proxyagent.run("build the app", token=token, proxy="https://proxy.you.com")   # 
 ```
 
 ## Harnesses & auth modes
-You run an **agent harness**, and each one can authenticate several ways. The proxy's job
-is to centralise *all* of them so the machine running the harness holds only a `pa_` token:
+Two things are separate: **which agent CLI you run** on the machine, and **how the proxy
+authenticates upstream**. The machine only ever holds a `pa_` token; the proxy holds the real
+credential in whatever auth mode you configure.
 
-| Harness | Provider | Auth modes |
-|---|---|---|
-| **Claude Code** | Anthropic | API key · OAuth (subscription) · AWS Bedrock · Google Vertex |
-| **Codex** | OpenAI | API key · OAuth (ChatGPT) · Azure |
-| **Gemini CLI** | Google | API key · OAuth · Vertex |
+Built-in harnesses (run the real CLI locally, keyless): **`claude-code`**, **`codex`**, and any
+**custom** command (`--command "my-agent {goal}"`) — anything that respects `*_BASE_URL`, e.g. aider/Cline.
 
-Connect each mode in the dashboard's **Harnesses** tab (or `proxyagent provider add … --kind`).
-**Every auth mode is wired**: API key, OAuth, AWS Bedrock (the proxy SigV4-signs the Claude-on-Bedrock
-request itself), Azure, and Google Vertex (service-account JSON → access token → Claude-on-Vertex).
-For Bedrock/Vertex the proxy holds the AWS/GCP credentials and signs upstream, so the machine needs no cloud creds at all. The model providers below are the *backends* for model-agnostic
-harnesses (aider, Cline…).
+On the proxy side, a provider credential can be any of these auth modes — all wired:
+
+| Auth mode | How the proxy uses it |
+|---|---|
+| **API key** | `x-api-key` / `Authorization: Bearer` to the provider endpoint |
+| **OAuth** | stored access token, auto-refreshed via refresh_token before expiry |
+| **AWS Bedrock** | the proxy SigV4-signs the Claude-on-Bedrock request itself (no boto3) |
+| **Azure** | api-key header to your Azure deployment URL |
+| **Google Vertex** | service-account JSON → JWT → access token → Claude-on-Vertex |
+
+For Bedrock/Vertex the proxy holds the AWS/GCP credentials and signs upstream, so the machine needs
+no cloud creds at all. Add any of them in the dashboard's **Access keys** tab or via `proxyagent provider add … --kind`.
 
 ```bash
 # the cloud-credential paths — the machine that runs the harness holds none of these:

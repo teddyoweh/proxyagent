@@ -15,7 +15,7 @@ from __future__ import annotations
 import os
 from typing import Optional
 
-__version__ = "0.49.0"
+__version__ = "0.49.1"
 __all__ = ["run", "serve", "create_app", "Config", "Admin", "__version__"]
 
 
