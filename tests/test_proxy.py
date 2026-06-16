@@ -328,3 +328,54 @@ def test_oauth_refresh_helpers():
     s.refresh_credential(cid, "new-tok", expires_ms=999999999999)
     c = s.get_credentials("anthropic", kind="oauth")[0]
     assert c["secret"] == "new-tok" and (c["meta"] or {}).get("expires_ms") == 999999999999
+
+
+def test_log_retention_trim():
+    from proxyagent.store import now_ms
+    s = Store(":memory:")
+    _, tok = s.create_token("m", ["*"])
+    # one old call (10 days ago) + one fresh call
+    s.log_request(token_id=tok["id"], provider="anthropic", model="mock", status=200,
+                  ts_ms=now_ms() - 10 * 86_400_000, cost_usd=0.01)
+    s.log_request(token_id=tok["id"], provider="anthropic", model="mock", status=200, cost_usd=0.02)
+    assert len(s.list_logs()) == 2
+    deleted = s.trim_logs(now_ms() - 7 * 86_400_000)   # keep last 7 days
+    assert deleted == 1
+    rows = s.list_logs()
+    assert len(rows) == 1 and rows[0]["model"] == "mock"
+
+
+def test_log_trim_and_export_endpoints():
+    c = _client()
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"], "label": "ci"}).json()["token"]
+    c.post("/anthropic/v1/messages", headers={"x-api-key": tok},
+           json={"model": "mock", "max_tokens": 10, "messages": [{"role": "user", "content": "hi"}]})
+    # CSV export carries the header row + the call
+    exp = c.get("/admin/logs/export", headers=ADMIN)
+    assert exp.status_code == 200 and exp.headers["content-type"].startswith("text/csv")
+    lines = exp.text.strip().splitlines()
+    assert lines[0].startswith("ts_ms,token_id,token_label,provider,model")
+    assert any("mock" in ln for ln in lines[1:])
+    # trim with days=0 wipes everything; bad input rejected
+    assert c.post("/admin/logs/trim", headers=ADMIN, params={"days": -1}).status_code == 400
+    trimmed = c.post("/admin/logs/trim", headers=ADMIN, params={"days": 0}).json()
+    assert trimmed["deleted"] >= 1 and c.get("/admin/logs", headers=ADMIN).json()["logs"] == []
+    # admin-gated
+    assert c.get("/admin/logs/export").status_code == 401
+
+
+def test_usage_by_token_breakdown():
+    c = _client()
+    a = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"], "label": "alpha"}).json()["token"]
+    b = c.post("/admin/tokens", headers=ADMIN,
+               json={"scope": ["*"], "label": "beta", "budget_usd": 5.0}).json()["token"]
+    for _ in range(2):
+        c.post("/anthropic/v1/messages", headers={"x-api-key": a},
+               json={"model": "mock", "max_tokens": 10, "messages": [{"role": "user", "content": "hi"}]})
+    c.post("/anthropic/v1/messages", headers={"x-api-key": b},
+           json={"model": "mock", "max_tokens": 10, "messages": [{"role": "user", "content": "yo"}]})
+    rows = {t["label"]: t for t in c.get("/admin/usage-by-token", headers=ADMIN).json()["tokens"]}
+    assert rows["alpha"]["requests"] == 2 and rows["beta"]["requests"] == 1
+    assert rows["beta"]["budget_usd"] == 5.0 and rows["beta"]["budget_pct"] is not None
+    assert rows["alpha"]["budget_pct"] is None
+    assert c.get("/admin/usage-by-token").status_code == 401

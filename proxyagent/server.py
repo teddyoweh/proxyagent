@@ -49,6 +49,16 @@ def create_app(config: Config | None = None) -> FastAPI:
     app = FastAPI(title="proxyagent", version="0.1.0")
     app.state.store = store
 
+    # Audit-log retention — trim call traces older than PROXYAGENT_LOG_RETENTION_DAYS
+    # on startup so an always-on proxy never grows the log table without bound.
+    import os as _os
+    _ret = int(_os.environ.get("PROXYAGENT_LOG_RETENTION_DAYS", "0") or 0)
+    if _ret > 0:
+        try:
+            store.trim_logs(now_ms() - _ret * 86_400_000)
+        except Exception:  # noqa: BLE001 — retention is best-effort, never block boot
+            pass
+
     # ------------------------------------------------------------------ #
     # Auth helpers
     # ------------------------------------------------------------------ #
@@ -203,6 +213,34 @@ def create_app(config: Config | None = None) -> FastAPI:
         require_admin(authorization, x_admin_token)
         return {"logs": store.list_logs(limit)}
 
+    @app.post("/admin/logs/trim")
+    async def trim_logs_ep(days: int = 30, authorization: str | None = Header(None),
+                           x_admin_token: str | None = Header(None)):
+        """Delete call traces older than `days`. The audit-log retention knob, on demand."""
+        require_admin(authorization, x_admin_token)
+        if days < 0:
+            raise HTTPException(400, "days must be >= 0")
+        deleted = store.trim_logs(now_ms() - days * 86_400_000)
+        return {"deleted": deleted, "kept_days": days}
+
+    @app.get("/admin/logs/export", response_class=PlainTextResponse)
+    async def export_logs_ep(limit: int = 100_000, authorization: str | None = Header(None),
+                             x_admin_token: str | None = Header(None)):
+        """Export the audit trail as CSV (for SIEM ingest / compliance / archival)."""
+        require_admin(authorization, x_admin_token)
+        import csv
+        import io
+        cols = ["ts_ms", "token_id", "token_label", "provider", "model", "status",
+                "prompt_tokens", "completion_tokens", "cost_usd", "latency_ms",
+                "streamed", "tools_used", "error"]
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(cols)
+        for r in store.list_logs(limit):
+            w.writerow([r.get(c) for c in cols])
+        return PlainTextResponse(buf.getvalue(), media_type="text/csv",
+                                 headers={"content-disposition": "attachment; filename=proxyagent-audit.csv"})
+
     def _configured() -> list[str]:
         env = set(config.configured_providers())
         db = {c["provider"] for c in store.list_credentials() if c["active"]}
@@ -215,6 +253,25 @@ def create_app(config: Config | None = None) -> FastAPI:
         return {"usage": store.usage_summary(), "providers": _configured(),
                 "tools": tools.list(), "backend": store.backend,
                 "encryption": crypto.encryption_available()}
+
+    @app.get("/admin/usage-by-token")
+    async def usage_by_token_ep(authorization: str | None = Header(None),
+                                x_admin_token: str | None = Header(None)):
+        """Per-token spend breakdown — which machine token is costing what."""
+        require_admin(authorization, x_admin_token)
+        rows = []
+        for r in store.usage_by_token():
+            budget = r.get("budget_usd")
+            cost = round(float(r.get("cost_usd") or 0), 6)
+            rows.append({
+                "id": r["id"], "label": r["label"], "masked": r.get("masked"),
+                "revoked": bool(r["revoked"]), "requests": r["requests"],
+                "prompt_tokens": r["prompt_tokens"], "completion_tokens": r["completion_tokens"],
+                "cost_usd": cost, "budget_usd": budget,
+                "budget_pct": round(cost / budget * 100, 1) if budget else None,
+                "last_call_ms": r.get("last_call_ms"), "last_used_ms": r.get("last_used_ms"),
+            })
+        return {"tokens": rows}
 
     # -- provider credentials (proxy_agent_keys) -------------------------- #
     @app.post("/admin/providers")

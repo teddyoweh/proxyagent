@@ -185,6 +185,26 @@ class Store:
     def list_logs(self, limit=200):
         return self.db.fetchall("SELECT * FROM proxy_agent_calls ORDER BY ts_ms DESC LIMIT ?", (limit,))
 
+    def trim_logs(self, older_than_ms: int) -> int:
+        cur = self.db.execute("DELETE FROM proxy_agent_calls WHERE ts_ms < ?", (older_than_ms,))
+        return cur.rowcount
+
+    def usage_by_token(self):
+        """Per-token spend breakdown — requests, tokens, cost, last-used — joined to the
+        token label/masked id so the dashboard can show who is spending what."""
+        rows = self.db.fetchall(
+            """SELECT t.id, t.label, t.masked, t.revoked, t.budget_usd, t.last_used_ms,
+                      COUNT(c.id) requests,
+                      COALESCE(SUM(c.prompt_tokens),0) prompt_tokens,
+                      COALESCE(SUM(c.completion_tokens),0) completion_tokens,
+                      COALESCE(SUM(c.cost_usd),0) cost_usd,
+                      MAX(c.ts_ms) last_call_ms
+               FROM proxy_agent_tokens t
+               LEFT JOIN proxy_agent_calls c ON c.token_id = t.id
+               GROUP BY t.id, t.label, t.masked, t.revoked, t.budget_usd, t.last_used_ms
+               ORDER BY cost_usd DESC""")
+        return [dict(r) for r in rows]
+
     def usage_summary(self):
         r = self.db.fetchone(
             """SELECT COUNT(*) requests,

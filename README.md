@@ -75,7 +75,8 @@ claude -p "ship it"
   key/fields, done. Listed with provider logo · auth type · masked key · remove.
 - **Machine tokens** — mint (scoped / TTL / budget), list, revoke.
 - **Model routing** — add/remove model remaps (e.g. `* → mock` for offline).
-- **Activity** — live request log with usage + cost, and headline stats.
+- **Activity** — **spend-by-token** breakdown (requests · tokens · cost · budget %), a live
+  request log with usage + cost, plus **Export CSV** and **Trim** of the audit trail.
 
 ## Proxied tools — the same trick, for tools
 The proxy can also hold your **tool** keys and hand agents governed tools — so an agent gets
@@ -111,6 +112,16 @@ cost** (per-model pricing, override via `PROXYAGENT_PRICING`). See it live:
 ```bash
 proxyagent usage          # totals: requests · tokens · $ cost
 proxyagent logs           # per-request trace incl. cost
+```
+
+**Per-token spend & audit retention.** See exactly which machine token is costing what
+(`GET /admin/usage-by-token`, surfaced in the dashboard's Activity tab). Keep the audit
+table bounded and exportable:
+
+```bash
+export PROXYAGENT_LOG_RETENTION_DAYS=30        # trim traces older than 30d on startup
+curl -XPOST localhost:8080/admin/logs/trim?days=30  -H "x-admin-token: pa_admin_…"   # trim on demand
+curl localhost:8080/admin/logs/export -H "x-admin-token: pa_admin_…" -o audit.csv     # CSV for SIEM/archival
 ```
 
 ## Deploy
