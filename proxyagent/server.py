@@ -7,6 +7,7 @@ and list tools. The static dashboard is served at /.
 
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 
@@ -132,11 +133,21 @@ def create_app(config: Config | None = None) -> FastAPI:
 
         # Server-side agentic tool loop: the proxy executes managed tools (keys stay here)
         # and re-calls the model until it returns a final answer. Non-streaming only.
+        # Step budget: env default, overridable per-request (0 = return the tool request
+        # without executing — handy for clients that want to run tools themselves).
         if tools_on and not streaming:
+            max_steps = int(os.environ.get("PROXYAGENT_MAX_TOOL_STEPS", "6") or 6)
+            hdr = request.headers.get("x-proxyagent-tool-steps-max")
+            if hdr is not None:
+                try:
+                    max_steps = max(0, min(20, int(hdr)))
+                except ValueError:
+                    pass
             status, payload, steps = await forward_agentic(
-                config, provider, body, token=token, store=store, tools=tools)
+                config, provider, body, token=token, store=store, tools=tools, max_steps=max_steps)
             return JSONResponse(payload, status_code=status,
-                                headers={"x-proxyagent-tool-steps": str(steps)})
+                                headers={"x-proxyagent-tool-steps": str(steps),
+                                         "x-proxyagent-tool-steps-max": str(max_steps)})
 
         # Response cache (non-streaming only): serve identical requests from memory.
         ck = None

@@ -105,7 +105,7 @@
         </div>
         <div id="tk_out" class="tok hide"></div>
       </div>
-      <div class="card"><table><thead><tr><th>ID</th><th>Label</th><th>Token</th><th>Scope</th><th>Budget</th><th>Status</th><th></th></tr></thead><tbody id="toks"></tbody></table></div>
+      <div class="card"><table><thead><tr><th>ID</th><th>Label</th><th>Token</th><th>Scope</th><th>Budget</th><th>Last used</th><th>Status</th><th></th></tr></thead><tbody id="toks"></tbody></table></div>
     </section>
 
     <section id="t_models" class="hide">
@@ -151,6 +151,7 @@ const A=()=>localStorage.getItem("pa_admin");
 const H=()=>({"x-admin-token":A(),"content-type":"application/json"});
 async function api(p,o={}){const r=await fetch(p,{...o,headers:{...H(),...(o.headers||{})}});if(r.status===401){logout();throw new Error("401")}return r}
 function val(id){const e=document.getElementById(id);return e?e.value.trim():""}
+function rel(ms){if(!ms)return"never";const s=Math.max(0,(Date.now()-ms)/1000);if(s<60)return"just now";if(s<3600)return Math.floor(s/60)+"m ago";if(s<86400)return Math.floor(s/3600)+"h ago";return Math.floor(s/86400)+"d ago"}
 function saveAdmin(){const v=document.getElementById("admintok").value.trim();if(v){localStorage.setItem("pa_admin",v);boot()}}
 function logout(){localStorage.removeItem("pa_admin");document.getElementById("app").classList.add("hide");document.getElementById("gate").classList.remove("hide")}
 function nav(t){document.querySelectorAll(".navitem").forEach(e=>e.classList.toggle("on",e.dataset.t===t));["keys","tokens","models","activity"].forEach(s=>document.getElementById("t_"+s).classList.toggle("hide",s!==t))}
@@ -235,7 +236,7 @@ function pickKind(k){
 async function createKey(){if(await submitCred("cf",cfProvider))closeCreate()}
 
 async function refreshTokens(){const d=await(await api("/admin/tokens")).json();
-  document.getElementById("toks").innerHTML=d.tokens.map(t=>`<tr><td class="mono">${t.id}</td><td>${t.label||""}</td><td class="mono">${t.masked||""}</td><td class="mono">${(t.scope||[]).join(", ")}</td><td class="mono">${t.budget_usd?('$'+(t.spent_usd||0).toFixed(4)+' / $'+(+t.budget_usd).toFixed(2)):'—'}</td><td>${t.revoked?'<span class="pill no">revoked</span>':'<span class="pill ok">active</span>'}</td><td>${t.revoked?"":`<button class="danger sm" onclick="revokeTok('${t.id}')">revoke</button>`}</td></tr>`).join("")}
+  document.getElementById("toks").innerHTML=d.tokens.map(t=>`<tr><td class="mono">${t.id}</td><td>${t.label||""}</td><td class="mono">${t.masked||""}</td><td class="mono">${(t.scope||[]).join(", ")}</td><td class="mono">${t.budget_usd?('$'+(t.spent_usd||0).toFixed(4)+' / $'+(+t.budget_usd).toFixed(2)):'—'}</td><td class="muted" style="font-size:12px">${rel(t.last_used_ms)}</td><td>${t.revoked?'<span class="pill no">revoked</span>':'<span class="pill ok">active</span>'}</td><td>${t.revoked?"":`<button class="danger sm" onclick="revokeTok('${t.id}')">revoke</button>`}</td></tr>`).join("")}
 async function mintToken(){const body={label:val("tk_label")||"machine",scope:(val("tk_scope")||"*").split(",").map(s=>s.trim()),ttl_seconds:parseInt(val("tk_ttl"))||null,budget_usd:parseFloat(val("tk_budget"))||null};
   const d=await(await api("/admin/tokens",{method:"POST",body:JSON.stringify(body)})).json();
   const el=document.getElementById("tk_out");el.classList.remove("hide");el.innerHTML=`<b>Token (shown once):</b> <button class="ghost sm" onclick="navigator.clipboard.writeText('${d.token}');this.textContent='copied'">copy</button><br/><span class="mono">${d.token}</span>`;refreshTokens()}

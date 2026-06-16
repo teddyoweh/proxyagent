@@ -408,6 +408,36 @@ def test_server_side_tool_loop(monkeypatch):
     assert r2.json()["choices"][0]["finish_reason"] == "stop"
 
 
+def test_agentic_max_steps_zero_returns_tool_request(monkeypatch):
+    """max-steps=0 returns the model's tool request WITHOUT executing it — so a client can
+    run the tool itself. Verifies the per-request header overrides the loop budget."""
+    import json as _j
+    c = _client()
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    r = c.post("/anthropic/v1/messages",
+               headers={"x-api-key": tok, "x-proxyagent-tools": "on", "x-proxyagent-tool-steps-max": "0"},
+               json={"model": "mock", "max_tokens": 50, "messages": [{"role": "user", "content": "hi"}]})
+    assert r.status_code == 200
+    assert r.headers.get("x-proxyagent-tool-steps") == "0"
+    assert r.headers.get("x-proxyagent-tool-steps-max") == "0"
+    body = r.json()
+    assert body["stop_reason"] == "tool_use"                 # not executed → still asking
+    assert any(b.get("type") == "tool_use" for b in body["content"])
+    # env default still runs the full loop when no header is sent
+    monkeypatch.setenv("PROXYAGENT_DISABLE_WEB_SEARCH", "1")
+    c2 = _client()
+    from proxyagent.tools import Tool
+
+    async def _echo(args):
+        return f"ECHO[{args.get('query', '')}]"
+    c2.app.state.tools.register(Tool("echo", "e", {"type": "object", "properties": {
+        "query": {"type": "string"}}, "required": ["query"]}, _echo))
+    tok2 = c2.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    r2 = c2.post("/anthropic/v1/messages", headers={"x-api-key": tok2, "x-proxyagent-tools": "on"},
+                 json={"model": "mock", "max_tokens": 50, "messages": [{"role": "user", "content": "go"}]})
+    assert r2.headers.get("x-proxyagent-tool-steps") == "1" and "ECHO[go]" in _j.dumps(r2.json())
+
+
 def test_plan_for_credential_per_kind():
     from proxyagent.providers import plan_for_credential
     from proxyagent.config import PROVIDERS

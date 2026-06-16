@@ -99,6 +99,10 @@ the finished answer back; the response carries `x-proxyagent-tool-steps: <n>`. W
 Anthropic (`tool_use`) and OpenAI (`tool_calls`) shapes. Try it offline with `model: "mock"` —
 the mock emits a real `tool_use`, so the loop runs end-to-end with no keys.
 
+The step budget defaults to 6 (`PROXYAGENT_MAX_TOOL_STEPS`) and is overridable per-request with
+`x-proxyagent-tool-steps-max: <n>`. Set it to **0** to get the model's tool request back
+*without* executing it — for clients that want to run the tool themselves.
+
 ## Credentials, storage & cost
 
 By default provider keys come from the **environment** and stay local. Or **add** them
