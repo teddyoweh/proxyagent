@@ -192,7 +192,25 @@ async def forward(
     last_status, last_payload = 502, {"error": "all credentials failed"}
     async with httpx.AsyncClient(timeout=config.request_timeout) as client:
         for i, (url, headers, raw) in enumerate(plans):
-            resp = await client.post(url, headers=headers, content=raw)
+            # Network faults (timeout / connect error) are retryable: rotate to the next
+            # credential, and if none is left return a clean 504/502 instead of a raw 500.
+            try:
+                resp = await client.post(url, headers=headers, content=raw)
+            except httpx.TimeoutException:
+                last_status = 504
+                last_payload = {"error": f"upstream timeout for provider '{provider_name}' "
+                                         f"after {config.request_timeout}s"}
+                if i < len(plans) - 1:
+                    continue
+                _log(504, None, None, "upstream timeout")
+                return 504, {"content-type": "application/json"}, last_payload, None
+            except httpx.RequestError as e:
+                last_status = 502
+                last_payload = {"error": f"upstream connection error for provider '{provider_name}'"}
+                if i < len(plans) - 1:
+                    continue
+                _log(502, None, None, redact.redact(f"{type(e).__name__}: {e}")[:200])
+                return 502, {"content-type": "application/json"}, last_payload, None
             if resp.status_code in FAILOVER_STATUS and i < len(plans) - 1:
                 last_status = resp.status_code
                 continue

@@ -465,6 +465,28 @@ def test_request_id_echo_and_logged():
     assert "request_id" in csv.splitlines()[0] and "trace-abc-123" in csv
 
 
+def test_upstream_timeout_returns_504(monkeypatch):
+    """A real upstream timeout surfaces as a clean 504 (not a raw 500)."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")   # gives build_plans a real plan
+    import proxyagent.providers as P
+
+    class _TimeoutClient:
+        def __init__(self, *a, **k): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def post(self, *a, **k): raise P.httpx.TimeoutException("timed out")
+
+    monkeypatch.setattr(P.httpx, "AsyncClient", _TimeoutClient)
+    c = _client()
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    r = c.post("/anthropic/v1/messages", headers={"x-api-key": tok},
+               json={"model": "claude-3-5-haiku", "max_tokens": 5,
+                     "messages": [{"role": "user", "content": "hi"}]})
+    assert r.status_code == 504 and "timeout" in r.json()["error"].lower()
+    # it's logged as a 504
+    assert c.get("/admin/logs", headers=ADMIN).json()["logs"][0]["status"] == 504
+
+
 def test_budget_webhook_fires(monkeypatch):
     """When a token crosses its budget, the proxy POSTs an alert to the configured webhook
     (deduped) before returning 402."""

@@ -189,6 +189,11 @@ a **14-day requests chart**, and each token's **expiry countdown**.
 `proxyagent_active_tokens`, `proxyagent_credentials`. Admin-gated by default; set
 `PROXYAGENT_METRICS_PUBLIC=1` for unauthenticated scraping on an internal network.
 
+## Resilience
+On a network fault the proxy fails over to the next credential in the pool; if they're all
+exhausted it returns a **clean `504`** (upstream timeout) or `502` (connection error) with a
+descriptive body — never a raw 500. Tune the upstream timeout with `PROXYAGENT_REQUEST_TIMEOUT`.
+
 ## Security model
 - **Real keys never leave the proxy** — read from env, never persisted, never logged, never returned.
 - **Machine tokens are stored hashed** (SHA-256); plaintext shown once. A stolen DB yields nothing usable.
