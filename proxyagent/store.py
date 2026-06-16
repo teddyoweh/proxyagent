@@ -72,6 +72,11 @@ class Store:
         )
         return plain, self.get_token(tid)
 
+    def token_request_count(self, token_id: str) -> int:
+        r = self.db.fetchone(
+            "SELECT COUNT(*) c FROM proxy_agent_calls WHERE token_id=?", (token_id,))
+        return int((r or {}).get("c", 0) or 0)
+
     def token_spend(self, token_id: str) -> float:
         r = self.db.fetchone(
             "SELECT COALESCE(SUM(cost_usd),0) s FROM proxy_agent_calls WHERE token_id=?", (token_id,))

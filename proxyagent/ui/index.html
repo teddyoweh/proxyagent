@@ -110,7 +110,7 @@
         <div id="tk_out" class="tok hide"></div>
       </div>
       <div style="margin-bottom:12px"><input id="tk_search" placeholder="Search tokens by label, id, or scope…" oninput="refreshTokens()" style="max-width:360px"/></div>
-      <div class="card"><table><thead><tr><th>ID</th><th>Label</th><th>Token</th><th>Scope</th><th>Budget</th><th>Last used</th><th>Expires</th><th>Status</th><th></th></tr></thead><tbody id="toks"></tbody></table></div>
+      <div class="card"><table><thead><tr><th>ID</th><th>Label</th><th>Token</th><th>Scope</th><th>Reqs</th><th>Budget</th><th>Last used</th><th>Expires</th><th>Status</th><th></th></tr></thead><tbody id="toks"></tbody></table></div>
     </section>
 
     <section id="t_models" class="hide">
@@ -273,7 +273,7 @@ function pickKind(k){
 async function createKey(){if(await submitCred("cf",cfProvider))closeCreate()}
 
 async function refreshTokens(){const q=val("tk_search");const d=await(await api("/admin/tokens"+(q?"?q="+encodeURIComponent(q):""))).json();
-  document.getElementById("toks").innerHTML=d.tokens.map(t=>`<tr><td class="mono">${t.id}</td><td>${t.label||""}</td><td class="mono">${t.masked||""}</td><td class="mono">${(t.scope||[]).join(", ")}</td><td class="mono">${t.budget_usd?('$'+(t.spent_usd||0).toFixed(4)+' / $'+(+t.budget_usd).toFixed(2)):'—'}</td><td class="muted" style="font-size:12px">${rel(t.last_used_ms)}</td><td class="muted" style="font-size:12px">${ttl(t.expires_ms)}</td><td>${t.revoked?'<span class="pill no">revoked</span>':(t.expires_ms&&t.expires_ms<Date.now()?'<span class="pill no">expired</span>':'<span class="pill ok">active</span>')}</td><td>${t.revoked?"":`<button class="ghost sm" onclick="editTok('${t.id}')">edit</button> <button class="danger sm" onclick="revokeTok('${t.id}')">revoke</button>`}</td></tr>`).join("")}
+  document.getElementById("toks").innerHTML=d.tokens.map(t=>`<tr><td class="mono">${t.id}</td><td>${t.label||""}</td><td class="mono">${t.masked||""}</td><td class="mono">${(t.scope||[]).join(", ")}</td><td>${t.requests??0}</td><td class="mono">${t.budget_usd?('$'+(t.spent_usd||0).toFixed(4)+' / $'+(+t.budget_usd).toFixed(2)):'—'}</td><td class="muted" style="font-size:12px">${rel(t.last_used_ms)}</td><td class="muted" style="font-size:12px">${ttl(t.expires_ms)}</td><td>${t.revoked?'<span class="pill no">revoked</span>':(t.expires_ms&&t.expires_ms<Date.now()?'<span class="pill no">expired</span>':'<span class="pill ok">active</span>')}</td><td>${t.revoked?"":`<button class="ghost sm" onclick="editTok('${t.id}')">edit</button> <button class="danger sm" onclick="revokeTok('${t.id}')">revoke</button>`}</td></tr>`).join("")}
 async function mintToken(){const body={label:val("tk_label")||"machine",scope:(val("tk_scope")||"*").split(",").map(s=>s.trim()),ttl_seconds:parseInt(val("tk_ttl"))||null,budget_usd:parseFloat(val("tk_budget"))||null};
   const d=await(await api("/admin/tokens",{method:"POST",body:JSON.stringify(body)})).json();
   const base=location.origin;

@@ -101,10 +101,23 @@ def create_app(config: Config | None = None) -> FastAPI:
             return
         alerted[key] = nowt
         try:
-            httpx.post(url, json={"event": "budget_exhausted", "type": kind, "id": name,
-                                  "cap_usd": cap, "spend_usd": round(spend, 6)}, timeout=5)
+            _post_webhook(url, {"event": "budget_exhausted", "type": kind, "id": name,
+                                "cap_usd": cap, "spend_usd": round(spend, 6)})
         except Exception:  # noqa: BLE001 — alerting is best-effort, never block the request
             pass
+
+    def _post_webhook(url: str, payload: dict) -> None:
+        """POST a JSON webhook, optionally HMAC-signed (X-Proxyagent-Signature: sha256=…) when
+        PROXYAGENT_WEBHOOK_SECRET is set, so receivers can verify authenticity."""
+        import hashlib
+        import hmac
+        body = _json.dumps(payload).encode()
+        headers = {"content-type": "application/json"}
+        secret = os.environ.get("PROXYAGENT_WEBHOOK_SECRET")
+        if secret:
+            headers["X-Proxyagent-Signature"] = "sha256=" + hmac.new(
+                secret.encode(), body, hashlib.sha256).hexdigest()
+        httpx.post(url, content=body, headers=headers, timeout=5)
 
     def _event(name: str, data: dict) -> None:
         """Fire-and-forget lifecycle event to PROXYAGENT_EVENT_WEBHOOK (token create/revoke)."""
@@ -112,7 +125,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         if not url:
             return
         try:
-            httpx.post(url, json={"event": name, **data}, timeout=5)
+            _post_webhook(url, {"event": name, **data})
         except Exception:  # noqa: BLE001 — best-effort, never block the admin op
             pass
 
@@ -325,7 +338,8 @@ def create_app(config: Config | None = None) -> FastAPI:
                         "scope": _json.loads(t["scope_json"]), "revoked": bool(t["revoked"]),
                         "rate_limit": t["rate_limit"], "expires_ms": t["expires_ms"],
                         "last_used_ms": t["last_used_ms"], "budget_usd": t.get("budget_usd"),
-                        "spent_usd": round(store.token_spend(t["id"]), 6)})
+                        "spent_usd": round(store.token_spend(t["id"]), 6),
+                        "requests": store.token_request_count(t["id"])})
         if q:
             ql = q.lower()
             out = [t for t in out if ql in (t["label"] or "").lower() or ql in t["id"].lower()

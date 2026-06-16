@@ -598,7 +598,9 @@ def test_event_webhook_token_lifecycle(monkeypatch):
     class _Resp:
         status_code = 200
 
-    monkeypatch.setattr(srv.httpx, "post", lambda url, **kw: (sent.append(kw.get("json")), _Resp())[1])
+    import json as _j
+    monkeypatch.setattr(srv.httpx, "post",
+                        lambda url, **kw: (sent.append(_j.loads(kw["content"])), _Resp())[1])
     monkeypatch.setenv("PROXYAGENT_EVENT_WEBHOOK", "https://hook.test/events")
     c = _client()
     mk = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"], "label": "ci"}).json()
@@ -607,6 +609,43 @@ def test_event_webhook_token_lifecycle(monkeypatch):
     assert "token_created" in events and "token_revoked" in events
     assert events["token_created"]["id"] == mk["id"] and events["token_created"]["label"] == "ci"
     assert events["token_revoked"]["id"] == mk["id"]
+
+
+def test_webhook_hmac_signature(monkeypatch):
+    """When PROXYAGENT_WEBHOOK_SECRET is set, webhook payloads carry a valid HMAC signature."""
+    import hashlib
+    import hmac
+    import json as _j
+    import proxyagent.server as srv
+    cap = {}
+
+    class _Resp:
+        status_code = 200
+
+    def _post(url, **kw):
+        cap["content"] = kw["content"]
+        cap["headers"] = kw["headers"]
+        return _Resp()
+
+    monkeypatch.setattr(srv.httpx, "post", _post)
+    monkeypatch.setenv("PROXYAGENT_EVENT_WEBHOOK", "https://hook.test/x")
+    monkeypatch.setenv("PROXYAGENT_WEBHOOK_SECRET", "s3cret")
+    c = _client()
+    c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"], "label": "ci"})
+    sig = cap["headers"].get("X-Proxyagent-Signature", "")
+    expected = "sha256=" + hmac.new(b"s3cret", cap["content"], hashlib.sha256).hexdigest()
+    assert sig == expected
+    assert _j.loads(cap["content"])["event"] == "token_created"
+
+
+def test_token_request_count():
+    c = _client()
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"], "label": "rc"}).json()["token"]
+    for _ in range(3):
+        c.post("/anthropic/v1/messages", headers={"x-api-key": tok},
+               json={"model": "mock", "max_tokens": 5, "messages": [{"role": "user", "content": "hi"}]})
+    rc = next(t for t in c.get("/admin/tokens", headers=ADMIN).json()["tokens"] if t["label"] == "rc")
+    assert rc["requests"] == 3
 
 
 def test_healthz_cache_field():
@@ -625,7 +664,8 @@ def test_budget_webhook_fires(monkeypatch):
         status_code = 200
 
     def _fake_post(url, **kw):
-        sent.append({"url": url, "json": kw.get("json")})
+        import json as _j
+        sent.append({"url": url, "json": _j.loads(kw["content"]), "headers": kw.get("headers", {})})
         return _Resp()
 
     monkeypatch.setattr(srv.httpx, "post", _fake_post)
