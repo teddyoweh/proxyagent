@@ -306,6 +306,15 @@ class Store:
             return vals[max(0, min(len(vals) - 1, int(math.ceil(p / 100 * len(vals)) - 1)))]
         return {"p50": _pct(50), "p95": _pct(95), "count": len(vals)}
 
+    def latency_histogram(self, buckets=(10, 50, 100, 250, 500, 1000, 2500, 5000)):
+        """Cumulative latency buckets (Prometheus histogram) over all logged calls:
+        {le: cumulative_count}, plus total sum + count."""
+        rows = self.db.fetchall(
+            "SELECT latency_ms FROM proxy_agent_calls WHERE latency_ms IS NOT NULL")
+        vals = [r["latency_ms"] for r in rows if r["latency_ms"] is not None]
+        cum = {b: sum(1 for v in vals if v <= b) for b in buckets}
+        return {"buckets": cum, "sum": sum(vals), "count": len(vals)}
+
     def usage_summary(self):
         r = self.db.fetchone(
             """SELECT COUNT(*) requests,

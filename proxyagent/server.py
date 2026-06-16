@@ -713,6 +713,14 @@ def create_app(config: Config | None = None) -> FastAPI:
               "# TYPE proxyagent_credentials gauge", f"proxyagent_credentials {m['credentials']}",
               "# TYPE proxyagent_cache_hits_total counter", f"proxyagent_cache_hits_total {cs['hits']}",
               "# TYPE proxyagent_cache_size gauge", f"proxyagent_cache_size {cs['size']}"]
+        h = store.latency_histogram()
+        L += ["# HELP proxyagent_request_duration_ms request latency (ms)",
+              "# TYPE proxyagent_request_duration_ms histogram"]
+        for le, n in h["buckets"].items():
+            L.append(f'proxyagent_request_duration_ms_bucket{{le="{le}"}} {n}')
+        L += [f'proxyagent_request_duration_ms_bucket{{le="+Inf"}} {h["count"]}',
+              f"proxyagent_request_duration_ms_sum {h['sum']}",
+              f"proxyagent_request_duration_ms_count {h['count']}"]
         return "\n".join(L) + "\n"
 
     # ------------------------------------------------------------------ #

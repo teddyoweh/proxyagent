@@ -192,7 +192,8 @@ dashboard's Activity tab shows the stat strip, a **14-day requests chart**, and 
 ## Observability — Prometheus
 `GET /metrics` exposes `proxyagent_requests_total`, `proxyagent_responses_total{status}`,
 `proxyagent_tokens_total{direction}`, `proxyagent_cost_usd_total{provider}`,
-`proxyagent_active_tokens`, `proxyagent_credentials`. Admin-gated by default; set
+`proxyagent_active_tokens`, `proxyagent_credentials`, and a
+`proxyagent_request_duration_ms` **histogram** (latency buckets + sum/count). Admin-gated by default; set
 `PROXYAGENT_METRICS_PUBLIC=1` for unauthenticated scraping on an internal network.
 
 ## Resilience

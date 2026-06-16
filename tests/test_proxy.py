@@ -346,6 +346,18 @@ def test_vertex_assertion_and_url():
         "/publishers/anthropic/models/claude-sonnet-4-5:rawPredict")
 
 
+def test_metrics_latency_histogram():
+    c = _client()
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    for _ in range(3):
+        c.post("/anthropic/v1/messages", headers={"x-api-key": tok},
+               json={"model": "mock", "max_tokens": 5, "messages": [{"role": "user", "content": "hi"}]})
+    m = c.get("/metrics", headers=ADMIN).text
+    assert "proxyagent_request_duration_ms histogram" in m
+    assert 'proxyagent_request_duration_ms_bucket{le="+Inf"} 3' in m
+    assert "proxyagent_request_duration_ms_count 3" in m
+
+
 def test_metrics_prometheus():
     c = _client()
     tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]

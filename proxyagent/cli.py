@@ -393,6 +393,17 @@ def models(provider: Optional[str] = typer.Argument(None, help="Limit to one pro
 
 
 @app.command()
+def summary(proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
+            admin: str = typer.Option(None, "--admin")):
+    """Print the Markdown status report (totals + top providers/models)."""
+    with _admin_client(proxy, admin) as c:
+        r = c.get("/admin/summary")
+    if r.status_code >= 400:
+        err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
+    console.print(r.text)
+
+
+@app.command()
 def doctor():
     """Diagnose the local setup — providers, encryption, database, admin token."""
     from . import crypto
