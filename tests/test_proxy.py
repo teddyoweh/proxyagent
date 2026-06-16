@@ -274,3 +274,20 @@ def test_metrics_prometheus():
     body = r.text
     assert "proxyagent_requests_total" in body and "proxyagent_cost_usd_total" in body
     assert 'proxyagent_responses_total{status="200"}' in body and "proxyagent_credentials" in body
+
+
+def test_response_cache():
+    import os
+    os.environ["PROXYAGENT_CACHE_TTL"] = "60"
+    try:
+        c = _client()
+        tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+        body = {"model": "mock", "messages": [{"role": "user", "content": "cache me"}]}
+        r1 = c.post("/anthropic/v1/messages", headers={"x-api-key": tok}, json=body)
+        assert r1.status_code == 200 and r1.headers.get("x-proxyagent-cache") is None   # miss → forwarded
+        r2 = c.post("/anthropic/v1/messages", headers={"x-api-key": tok}, json=body)
+        assert r2.headers.get("x-proxyagent-cache") == "hit" and r1.json() == r2.json()  # served from cache
+        r3 = c.post("/anthropic/v1/messages", headers={"x-api-key": tok, "x-proxyagent-cache": "no"}, json=body)
+        assert r3.headers.get("x-proxyagent-cache") is None                              # bypass forces a miss
+    finally:
+        os.environ.pop("PROXYAGENT_CACHE_TTL", None)

@@ -14,7 +14,7 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
-from . import aliases, crypto
+from . import aliases, cache, crypto
 from .config import AUTH_LABELS, AUTH_READY, CATALOG, HARNESSES, Config, PROVIDERS
 from .providers import forward, scope_allows
 from .security import token_matches
@@ -108,11 +108,25 @@ def create_app(config: Config | None = None) -> FastAPI:
             used_tools = tools.names()
 
         streaming = bool(body.get("stream"))
+
+        # Response cache (non-streaming only): serve identical requests from memory.
+        ck = None
+        if not streaming and cache.enabled() and request.headers.get("x-proxyagent-cache", "").lower() != "no":
+            ck = cache.key(provider, body)
+            hit = cache.get(ck)
+            if hit is not None:
+                store.log_request(token_id=token["id"], token_label=token.get("label"),
+                                  provider=provider, model=model, status=200, cost_usd=0.0,
+                                  tools_used='["cache-hit"]')
+                return JSONResponse(hit, status_code=200, headers={"x-proxyagent-cache": "hit"})
+
         status, headers, payload, _ = await forward(
             config, provider, body, streaming=streaming, token=token, store=store,
             tools_used=used_tools)
         if streaming:
             return StreamingResponse(payload, media_type="text/event-stream")
+        if ck is not None and status == 200 and isinstance(payload, dict):
+            cache.put(ck, payload)
         return JSONResponse(payload, status_code=status)
 
     # OpenAI-compatible providers hit /<provider>/v1/chat/completions; Anthropic-style
@@ -320,8 +334,11 @@ def create_app(config: Config | None = None) -> FastAPI:
               f"proxyagent_cost_usd_total {t['cost_usd']}"]
         for r in m["by_provider"]:
             L.append(f'proxyagent_cost_usd_total{{provider="{r["provider"]}"}} {r["c"]}')
+        cs = cache.stats()
         L += ["# TYPE proxyagent_active_tokens gauge", f"proxyagent_active_tokens {m['active_tokens']}",
-              "# TYPE proxyagent_credentials gauge", f"proxyagent_credentials {m['credentials']}"]
+              "# TYPE proxyagent_credentials gauge", f"proxyagent_credentials {m['credentials']}",
+              "# TYPE proxyagent_cache_hits_total counter", f"proxyagent_cache_hits_total {cs['hits']}",
+              "# TYPE proxyagent_cache_size gauge", f"proxyagent_cache_size {cs['size']}"]
         return "\n".join(L) + "\n"
 
     # ------------------------------------------------------------------ #

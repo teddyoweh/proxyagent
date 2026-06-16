@@ -123,6 +123,12 @@ A `Dockerfile` (with a `/healthz` HEALTHCHECK) and `docker-compose.yml` (proxy +
 persistent volume) ship in the repo. Bring keys via a `.env` file. Verified: container builds,
 `/healthz` green, mock call + dashboard serve.
 
+## Response cache
+Off by default. Set `PROXYAGENT_CACHE_TTL=<seconds>` and identical (provider + body) non-streaming
+requests are served from memory — saving upstream cost + latency. Cache hits return
+`x-proxyagent-cache: hit`; bypass per-request with header `x-proxyagent-cache: no`. Hits/size are
+in `/metrics`.
+
 ## Observability — Prometheus
 `GET /metrics` exposes `proxyagent_requests_total`, `proxyagent_responses_total{status}`,
 `proxyagent_tokens_total{direction}`, `proxyagent_cost_usd_total{provider}`,
