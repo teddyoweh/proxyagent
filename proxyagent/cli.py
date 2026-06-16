@@ -283,6 +283,38 @@ def token_ls(proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
     console.print(t)
 
 
+@token_app.command("edit")
+def token_edit(
+    token_id: str,
+    scope: list[str] = typer.Option(None, "--scope", help="Replace the scope globs."),
+    rate: Optional[int] = typer.Option(None, "--rate", help="New rate limit (req/min)."),
+    budget: Optional[float] = typer.Option(None, "--budget", help="New $ budget."),
+    proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
+    admin: Optional[str] = typer.Option(None, "--admin"),
+):
+    """Retune a token in place — scope / rate / budget — without re-minting."""
+    body: dict = {}
+    if scope:
+        body["scope"] = list(scope)
+    if rate is not None:
+        body["rate_limit"] = rate
+    if budget is not None:
+        body["budget_usd"] = budget
+    if not body:
+        err.print("[yellow]Nothing to change[/yellow] — pass --scope / --rate / --budget."); raise typer.Exit(1)
+    if not _is_remote(proxy, admin):
+        if not _local_store().update_token(token_id, scope=body.get("scope"),
+                                           rate_limit=body.get("rate_limit"),
+                                           budget_usd=body.get("budget_usd")):
+            err.print("[red]✗[/red] no such token"); raise typer.Exit(1)
+    else:
+        with _admin_client(proxy, admin) as c:
+            r = c.patch(f"/admin/tokens/{token_id}", json=body)
+        if r.status_code >= 400:
+            err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
+    console.print(f"[green]✓[/green] updated {token_id} ({', '.join(body)})")
+
+
 @token_app.command("revoke")
 def token_revoke(token_id: str, proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
                  admin: Optional[str] = typer.Option(None, "--admin")):

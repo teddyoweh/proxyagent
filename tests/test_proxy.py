@@ -382,6 +382,21 @@ def test_credential_toggle_active():
     assert c.post("/admin/providers/key_nope/toggle", headers=ADMIN).status_code == 404
 
 
+def test_token_search_filter():
+    c = _client()
+    c.post("/admin/tokens", headers=ADMIN, json={"label": "macbook-pro", "scope": ["anthropic:*"]})
+    c.post("/admin/tokens", headers=ADMIN, json={"label": "ci-runner", "scope": ["openai:*"]})
+    assert len(c.get("/admin/tokens", headers=ADMIN).json()["tokens"]) >= 2
+    # filter by label substring
+    mac = c.get("/admin/tokens", headers=ADMIN, params={"q": "macbook"}).json()["tokens"]
+    assert len(mac) == 1 and mac[0]["label"] == "macbook-pro"
+    # filter by scope substring
+    oa = c.get("/admin/tokens", headers=ADMIN, params={"q": "openai"}).json()["tokens"]
+    assert len(oa) == 1 and oa[0]["label"] == "ci-runner"
+    # no matches → empty
+    assert c.get("/admin/tokens", headers=ADMIN, params={"q": "zzz-nope"}).json()["tokens"] == []
+
+
 def test_patch_token_retune():
     c = _client()
     mk = c.post("/admin/tokens", headers=ADMIN,

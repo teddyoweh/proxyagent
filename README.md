@@ -76,8 +76,9 @@ claude -p "ship it"
   remove. **Test** pings the real upstream and shows ok / auth-failed / unreachable — catch a
   bad key the moment you add it. **Disable** pauses a credential (it drops out of the failover
   pool) without deleting it, so you can re-enable later.
-- **Machine tokens** — mint (scoped / TTL / budget), list, **edit** (retune scope / rate /
-  budget in place, no re-mint), revoke. Minting shows a ready-to-run sample curl.
+- **Machine tokens** — mint (scoped / TTL / budget), **search** (by label/id/scope), **edit**
+  (retune scope / rate / budget in place, no re-mint), revoke. Minting shows a ready-to-run
+  sample curl and a copy-`.env` snippet.
 - **Model routing** — add/remove model remaps (e.g. `* → mock` for offline).
 - **Activity** — **spend-by-token** breakdown (requests · tokens · cost · budget %), a live
   request log with usage + cost, plus **Export CSV** and **Trim** of the audit trail.

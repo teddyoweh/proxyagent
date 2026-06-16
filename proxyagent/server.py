@@ -302,7 +302,7 @@ def create_app(config: Config | None = None) -> FastAPI:
                 "scope": body.scope, "budget_usd": body.budget_usd, "note": "shown once — store it now"}
 
     @app.get("/admin/tokens")
-    async def list_tokens_ep(authorization: str | None = Header(None),
+    async def list_tokens_ep(q: str | None = None, authorization: str | None = Header(None),
                              x_admin_token: str | None = Header(None)):
         require_admin(authorization, x_admin_token)
         out = []
@@ -312,6 +312,10 @@ def create_app(config: Config | None = None) -> FastAPI:
                         "rate_limit": t["rate_limit"], "expires_ms": t["expires_ms"],
                         "last_used_ms": t["last_used_ms"], "budget_usd": t.get("budget_usd"),
                         "spent_usd": round(store.token_spend(t["id"]), 6)})
+        if q:
+            ql = q.lower()
+            out = [t for t in out if ql in (t["label"] or "").lower() or ql in t["id"].lower()
+                   or any(ql in s.lower() for s in t["scope"])]
         return {"tokens": out}
 
     @app.delete("/admin/tokens/{tid}")
