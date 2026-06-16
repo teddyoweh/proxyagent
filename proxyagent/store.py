@@ -106,9 +106,9 @@ class Store:
             "WHERE revoked=0 AND expires_ms IS NOT NULL AND expires_ms < ?", (now_ms(),))
         return cur.rowcount
 
-    def update_token(self, tid, *, scope=None, rate_limit=None, budget_usd=None):
-        """Retune a token in place — scope, rate limit, and/or budget — without re-minting.
-        Only the fields passed (not None) are changed."""
+    def update_token(self, tid, *, scope=None, rate_limit=None, budget_usd=None, note=None):
+        """Retune a token in place — scope, rate limit, budget, and/or note — without
+        re-minting. Only the fields passed (not None) are changed."""
         sets, args = [], []
         if scope is not None:
             sets.append("scope_json=?"); args.append(json.dumps(scope))
@@ -116,6 +116,8 @@ class Store:
             sets.append("rate_limit=?"); args.append(rate_limit)
         if budget_usd is not None:
             sets.append("budget_usd=?"); args.append(budget_usd)
+        if note is not None:
+            sets.append("note=?"); args.append(note)
         if not sets:
             return False
         args.append(tid)

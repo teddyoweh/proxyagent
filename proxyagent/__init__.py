@@ -16,7 +16,7 @@ from typing import Optional
 
 from .harness import run  # noqa: F401  (the headline SDK call)
 
-__version__ = "0.41.0"
+__version__ = "0.42.0"
 __all__ = ["run", "serve", "create_app", "Config", "Admin", "__version__"]
 
 
@@ -83,6 +83,12 @@ class Admin:
     def stats(self) -> dict:
         """One-shot operational summary: version, uptime, cache, counts, spend."""
         return self._c.get("/admin/stats").json()
+
+    def summary(self) -> str:
+        """A shareable Markdown status report (totals, top providers/models)."""
+        r = self._c.get("/admin/summary")
+        r.raise_for_status()
+        return r.text
 
     def usage_by_token(self) -> list:
         """Per-token spend breakdown — which machine token is costing what."""

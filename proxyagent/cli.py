@@ -289,10 +289,11 @@ def token_edit(
     scope: list[str] = typer.Option(None, "--scope", help="Replace the scope globs."),
     rate: Optional[int] = typer.Option(None, "--rate", help="New rate limit (req/min)."),
     budget: Optional[float] = typer.Option(None, "--budget", help="New $ budget."),
+    note: Optional[str] = typer.Option(None, "--note", help="Set the token note."),
     proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
     admin: Optional[str] = typer.Option(None, "--admin"),
 ):
-    """Retune a token in place — scope / rate / budget — without re-minting."""
+    """Retune a token in place — scope / rate / budget / note — without re-minting."""
     body: dict = {}
     if scope:
         body["scope"] = list(scope)
@@ -300,12 +301,14 @@ def token_edit(
         body["rate_limit"] = rate
     if budget is not None:
         body["budget_usd"] = budget
+    if note is not None:
+        body["note"] = note
     if not body:
-        err.print("[yellow]Nothing to change[/yellow] — pass --scope / --rate / --budget."); raise typer.Exit(1)
+        err.print("[yellow]Nothing to change[/yellow] — pass --scope / --rate / --budget / --note."); raise typer.Exit(1)
     if not _is_remote(proxy, admin):
         if not _local_store().update_token(token_id, scope=body.get("scope"),
                                            rate_limit=body.get("rate_limit"),
-                                           budget_usd=body.get("budget_usd")):
+                                           budget_usd=body.get("budget_usd"), note=body.get("note")):
             err.print("[red]✗[/red] no such token"); raise typer.Exit(1)
     else:
         with _admin_client(proxy, admin) as c:

@@ -439,6 +439,22 @@ def test_token_search_filter():
     assert c.get("/admin/tokens", headers=ADMIN, params={"q": "zzz-nope"}).json()["tokens"] == []
 
 
+def test_patch_token_note_and_summary():
+    c = _client()
+    tid = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"], "label": "n"}).json()["id"]
+    # edit just the note via PATCH
+    assert c.patch("/admin/tokens/" + tid, headers=ADMIN, json={"note": "rotated 2026-06"}).status_code == 200
+    listed = {t["id"]: t for t in c.get("/admin/tokens", headers=ADMIN).json()["tokens"]}
+    assert listed[tid]["note"] == "rotated 2026-06"
+    # drive a request, then the Markdown summary reflects it
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    c.post("/anthropic/v1/messages", headers={"x-api-key": tok},
+           json={"model": "mock", "max_tokens": 5, "messages": [{"role": "user", "content": "hi"}]})
+    md = c.get("/admin/summary", headers=ADMIN).text
+    assert md.startswith("# proxyagent") and "**requests**" in md and "By provider" in md and "anthropic" in md
+    assert c.get("/admin/summary").status_code == 401
+
+
 def test_patch_token_retune():
     c = _client()
     mk = c.post("/admin/tokens", headers=ADMIN,

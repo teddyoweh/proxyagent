@@ -41,6 +41,7 @@ class TokenPatch(BaseModel):
     scope: list[str] | None = None
     rate_limit: int | None = None
     budget_usd: float | None = None
+    note: str | None = None
 
 
 class ProviderBody(BaseModel):
@@ -391,7 +392,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         if not store.get_token(tid):
             raise HTTPException(404, "no such token")
         if not store.update_token(tid, scope=body.scope, rate_limit=body.rate_limit,
-                                  budget_usd=body.budget_usd):
+                                  budget_usd=body.budget_usd, note=body.note):
             raise HTTPException(400, "nothing to update")
         t = store.get_token(tid)
         return {"id": tid, "scope": _json.loads(t["scope_json"]),
@@ -464,6 +465,32 @@ def create_app(config: Config | None = None) -> FastAPI:
             "credentials": m["credentials"], "providers": _configured(),
             "requests": m["total"]["requests"], "cost_usd": round(m["total"]["cost_usd"] or 0, 6),
         }
+
+    @app.get("/admin/summary", response_class=PlainTextResponse)
+    async def summary_ep(authorization: str | None = Header(None),
+                         x_admin_token: str | None = Header(None)):
+        """A shareable Markdown status report — totals, top providers/models/tokens."""
+        require_admin(authorization, x_admin_token)
+        from . import __version__
+        m = store.metrics()
+        t = m["total"]
+        L = [f"# proxyagent — status", "",
+             f"- **version**: {__version__}",
+             f"- **uptime**: {round(time.time() - started_at)}s",
+             f"- **backend**: {store.backend}" + (" · encrypted" if crypto.encryption_available() else ""),
+             f"- **requests**: {t['requests']}  ·  **tokens**: {t['prompt_tokens']:,} in / {t['completion_tokens']:,} out",
+             f"- **spend**: ${round(t['cost_usd'] or 0, 4)}", ""]
+        by_prov = sorted(m["by_provider"], key=lambda r: r["n"], reverse=True)
+        if by_prov:
+            L += ["## By provider", "", "| provider | requests | $ |", "|---|---|---|"]
+            L += [f"| {r['provider']} | {r['n']} | ${round(r['c'] or 0, 4)} |" for r in by_prov]
+            L.append("")
+        models = store.usage_by_model()[:10]
+        if models:
+            L += ["## Top models", "", "| model | requests | $ |", "|---|---|---|"]
+            L += [f"| {r['provider']}:{r['model']} | {r['requests']} | ${round(r['cost_usd'] or 0, 4)} |" for r in models]
+            L.append("")
+        return "\n".join(L) + "\n"
 
     @app.get("/admin/usage-by-day")
     async def usage_by_day_ep(days: int = 14, authorization: str | None = Header(None),
