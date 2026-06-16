@@ -376,10 +376,18 @@ def create_app(config: Config | None = None) -> FastAPI:
             "version": __version__, "uptime_s": round(time.time() - started_at),
             "backend": store.backend, "encryption": crypto.encryption_available(),
             "cache": {"enabled": cache.enabled(), "ttl_s": cs["ttl"], "hits": cs["hits"], "size": cs["size"]},
+            "latency_ms": store.latency_percentiles(),
             "tokens": {"active": sum(1 for t in toks if not t["revoked"]), "total": len(toks)},
             "credentials": m["credentials"], "providers": _configured(),
             "requests": m["total"]["requests"], "cost_usd": round(m["total"]["cost_usd"] or 0, 6),
         }
+
+    @app.get("/admin/usage-by-day")
+    async def usage_by_day_ep(days: int = 14, authorization: str | None = Header(None),
+                              x_admin_token: str | None = Header(None)):
+        """Daily usage timeseries — requests, tokens, cost per UTC day."""
+        require_admin(authorization, x_admin_token)
+        return {"days": store.usage_by_day(max(1, min(365, days)))}
 
     @app.get("/admin/usage-by-model")
     async def usage_by_model_ep(authorization: str | None = Header(None),

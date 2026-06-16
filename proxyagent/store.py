@@ -255,6 +255,39 @@ class Store:
                ORDER BY cost_usd DESC, requests DESC""")
         return [dict(r) for r in rows]
 
+    def usage_by_day(self, days: int = 14):
+        """Daily timeseries — requests, tokens, cost per UTC day over the window. Bucketed in
+        Python so it works identically on SQLite and Postgres."""
+        since = now_ms() - days * 86_400_000
+        rows = self.db.fetchall(
+            "SELECT ts_ms, cost_usd, prompt_tokens, completion_tokens "
+            "FROM proxy_agent_calls WHERE ts_ms>=?", (since,))
+        buckets: dict[str, dict] = {}
+        for r in rows:
+            day = time.strftime("%Y-%m-%d", time.gmtime((r["ts_ms"] or 0) / 1000))
+            b = buckets.setdefault(day, {"date": day, "requests": 0, "cost_usd": 0.0,
+                                         "prompt_tokens": 0, "completion_tokens": 0})
+            b["requests"] += 1
+            b["cost_usd"] += float(r["cost_usd"] or 0)
+            b["prompt_tokens"] += r["prompt_tokens"] or 0
+            b["completion_tokens"] += r["completion_tokens"] or 0
+        for b in buckets.values():
+            b["cost_usd"] = round(b["cost_usd"], 6)
+        return sorted(buckets.values(), key=lambda x: x["date"])
+
+    def latency_percentiles(self, limit: int = 1000):
+        """p50/p95 latency over the most recent `limit` calls."""
+        rows = self.db.fetchall(
+            "SELECT latency_ms FROM proxy_agent_calls WHERE latency_ms IS NOT NULL "
+            "ORDER BY ts_ms DESC LIMIT ?", (limit,))
+        vals = sorted(r["latency_ms"] for r in rows if r["latency_ms"] is not None)
+        if not vals:
+            return {"p50": None, "p95": None, "count": 0}
+        import math
+        def _pct(p):
+            return vals[max(0, min(len(vals) - 1, int(math.ceil(p / 100 * len(vals)) - 1)))]
+        return {"p50": _pct(50), "p95": _pct(95), "count": len(vals)}
+
     def usage_summary(self):
         r = self.db.fetchone(
             """SELECT COUNT(*) requests,

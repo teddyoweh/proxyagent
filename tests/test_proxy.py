@@ -387,6 +387,28 @@ def test_models_listing_endpoint():
     assert c.get("/nope/v1/models", headers={"x-api-key": tok}).status_code == 404
 
 
+def test_usage_by_day_and_latency():
+    from proxyagent.store import now_ms
+    c = _client()
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    store = c.app.state.store
+    _, trow = store.create_token("seed", ["*"])
+    # two calls today + one 3 days ago (explicit ts + latency)
+    store.log_request(token_id=trow["id"], provider="anthropic", model="mock", status=200,
+                      cost_usd=0.0, latency_ms=10)
+    store.log_request(token_id=trow["id"], provider="anthropic", model="mock", status=200,
+                      cost_usd=0.0, latency_ms=30)
+    store.log_request(token_id=trow["id"], provider="anthropic", model="mock", status=200,
+                      cost_usd=0.0, latency_ms=20, ts_ms=now_ms() - 3 * 86_400_000)
+    days = c.get("/admin/usage-by-day", headers=ADMIN, params={"days": 14}).json()["days"]
+    assert len(days) == 2 and all("date" in d and d["requests"] >= 1 for d in days)
+    assert sum(d["requests"] for d in days) == 3
+    # latency percentiles show up in /admin/stats
+    lat = c.get("/admin/stats", headers=ADMIN).json()["latency_ms"]
+    assert lat["count"] == 3 and lat["p50"] in (10, 20, 30) and lat["p95"] == 30
+    assert c.get("/admin/usage-by-day").status_code == 401
+
+
 def test_admin_stats_summary():
     import proxyagent
     c = _client()
