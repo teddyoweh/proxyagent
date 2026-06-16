@@ -290,6 +290,7 @@ with a cooldown) right before the 402:
 ```bash
 export PROXYAGENT_BUDGET_WEBHOOK=https://hooks.slack.com/…   # {event,type,id,cap_usd,spend_usd}
 export PROXYAGENT_BUDGET_WEBHOOK_COOLDOWN=300                # seconds between repeat alerts (default 300)
+export PROXYAGENT_EVENT_WEBHOOK=https://hooks.you.com/…      # token_created / token_revoked lifecycle events
 ```
 
 ## Supported providers

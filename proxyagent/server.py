@@ -106,6 +106,16 @@ def create_app(config: Config | None = None) -> FastAPI:
         except Exception:  # noqa: BLE001 — alerting is best-effort, never block the request
             pass
 
+    def _event(name: str, data: dict) -> None:
+        """Fire-and-forget lifecycle event to PROXYAGENT_EVENT_WEBHOOK (token create/revoke)."""
+        url = os.environ.get("PROXYAGENT_EVENT_WEBHOOK")
+        if not url:
+            return
+        try:
+            httpx.post(url, json={"event": name, **data}, timeout=5)
+        except Exception:  # noqa: BLE001 — best-effort, never block the admin op
+            pass
+
     # ------------------------------------------------------------------ #
     # Auth helpers
     # ------------------------------------------------------------------ #
@@ -301,6 +311,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         require_admin(authorization, x_admin_token)
         plain, row = store.create_token(body.label, body.scope, ttl_seconds=body.ttl_seconds,
                                         rate_limit=body.rate_limit, budget_usd=body.budget_usd)
+        _event("token_created", {"id": row["id"], "label": row["label"], "scope": body.scope})
         return {"token": plain, "id": row["id"], "label": row["label"],
                 "scope": body.scope, "budget_usd": body.budget_usd, "note": "shown once — store it now"}
 
@@ -327,6 +338,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         require_admin(authorization, x_admin_token)
         if not store.revoke_token(tid):
             raise HTTPException(404, "no such token")
+        _event("token_revoked", {"id": tid})
         return {"ok": True}
 
     @app.patch("/admin/tokens/{tid}")
@@ -590,7 +602,8 @@ def create_app(config: Config | None = None) -> FastAPI:
         return {"ok": True, "version": __version__, "uptime_s": round(time.time() - started_at),
                 "providers": _configured(), "available": sorted(PROVIDERS),
                 "tools": tools.names(), "backend": store.backend,
-                "aliases": len(aliases.get_map())}
+                "aliases": len(aliases.get_map()),
+                "cache": {"enabled": cache.enabled(), "size": cache.stats()["size"]}}
 
     @app.get("/readyz")
     async def readyz():

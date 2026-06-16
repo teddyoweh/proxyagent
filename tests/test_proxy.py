@@ -590,6 +590,31 @@ def test_upstream_timeout_returns_504(monkeypatch):
     assert c.get("/admin/logs", headers=ADMIN).json()["logs"][0]["status"] == 504
 
 
+def test_event_webhook_token_lifecycle(monkeypatch):
+    """Creating + revoking a token POSTs lifecycle events to PROXYAGENT_EVENT_WEBHOOK."""
+    import proxyagent.server as srv
+    sent = []
+
+    class _Resp:
+        status_code = 200
+
+    monkeypatch.setattr(srv.httpx, "post", lambda url, **kw: (sent.append(kw.get("json")), _Resp())[1])
+    monkeypatch.setenv("PROXYAGENT_EVENT_WEBHOOK", "https://hook.test/events")
+    c = _client()
+    mk = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"], "label": "ci"}).json()
+    c.delete("/admin/tokens/" + mk["id"], headers=ADMIN)
+    events = {e["event"]: e for e in sent}
+    assert "token_created" in events and "token_revoked" in events
+    assert events["token_created"]["id"] == mk["id"] and events["token_created"]["label"] == "ci"
+    assert events["token_revoked"]["id"] == mk["id"]
+
+
+def test_healthz_cache_field():
+    c = _client()
+    h = c.get("/healthz").json()
+    assert "cache" in h and set(h["cache"]) == {"enabled", "size"}
+
+
 def test_budget_webhook_fires(monkeypatch):
     """When a token crosses its budget, the proxy POSTs an alert to the configured webhook
     (deduped) before returning 402."""
