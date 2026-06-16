@@ -37,9 +37,9 @@
   .navitem.on::before{content:"";position:absolute;left:-14px;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--grn)}
   .navitem.on svg{opacity:1;color:var(--grn)}
   .side-foot{margin-top:auto;padding:14px 4px 2px;color:var(--dim);font-size:12px;display:flex;flex-direction:column;gap:7px}
-  main{flex:1;padding:34px 44px 64px;max-width:1080px;width:100%;margin:0 auto}
-  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:28px}
-  .card{background:var(--panel);border-radius:var(--r);padding:20px;box-shadow:var(--shadow)}
+  main{flex:1;padding:28px 36px 56px;max-width:1080px;width:100%;margin:0 auto}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:22px}
+  .card{background:var(--panel);border-radius:var(--r);padding:17px 18px;box-shadow:var(--shadow)}
   .stat{position:relative;overflow:hidden}
   .stat .n{font-size:29px;font-weight:720;letter-spacing:-.03em;line-height:1.1}
   .stat .l{color:var(--dim);font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;margin-top:7px;font-weight:600}
@@ -70,22 +70,24 @@
   .gate input{margin:14px 0 12px;text-align:center}.gate button{width:100%}
   .tok{background:var(--panel2);padding:14px;border-radius:12px;word-break:break-all;margin-top:13px;font-size:13px}
   .hide{display:none!important}.muted{color:var(--dim)}
-  .h{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0 0 18px;flex-wrap:wrap}
+  .h{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0 0 14px;flex-wrap:wrap}
   h2{font-size:20px;font-weight:680;margin:0;letter-spacing:-.02em}
   section>.h h2{font-size:21px}
   .empty{text-align:center;color:var(--dim);padding:54px 20px;border-radius:var(--r);background:var(--panel);box-shadow:var(--shadow)}
-  .label{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);margin:16px 0 9px;font-weight:600}
+  .label{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);margin:13px 0 7px;font-weight:600}
   section{animation:fade .25s ease}@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
   /* create-access-key modal */
   .modal{position:fixed;inset:0;background:rgba(5,7,10,.62);backdrop-filter:blur(6px);display:grid;place-items:center;z-index:50;padding:20px;animation:fade .16s ease}
-  .modal-card{width:540px;max-width:94vw;max-height:90vh;overflow:auto;background:var(--panel);border-radius:20px;padding:26px;box-shadow:0 30px 80px -24px rgba(0,0,0,.8);animation:pop .2s cubic-bezier(.2,.8,.3,1.2)}
+  .modal-card{width:500px;max-width:94vw;max-height:90vh;overflow:auto;background:var(--panel);border-radius:18px;padding:22px;box-shadow:0 30px 80px -24px rgba(0,0,0,.8);animation:pop .2s cubic-bezier(.2,.8,.3,1.2)}
   @keyframes pop{from{opacity:0;transform:scale(.96) translateY(8px)}to{opacity:1;transform:none}}
-  .provpick{display:grid;grid-template-columns:repeat(auto-fill,minmax(94px,1fr));gap:9px}
-  .ppick{display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 8px;border-radius:13px;background:var(--panel2);cursor:pointer;font-size:11.5px;color:var(--dim);transition:.14s}
-  .ppick:hover{color:var(--txt);background:var(--soft);transform:translateY(-1px)}
+  .modal-card .h{margin-bottom:6px}
+  .provpick{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+  .ppick{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px;border-radius:11px;background:var(--panel2);cursor:pointer;font-size:11px;color:var(--dim);transition:.14s}
+  .ppick:hover{color:var(--txt);background:var(--soft)}
   .ppick.sel{color:var(--txt);background:rgba(61,220,151,.12);box-shadow:inset 0 0 0 1.5px var(--grn)}
-  .chips{display:flex;gap:8px;flex-wrap:wrap}
-  .chip{padding:8px 15px;border-radius:9px;background:var(--soft);color:var(--dim);cursor:pointer;font-size:12px;text-transform:uppercase;letter-spacing:.04em;font-weight:600;transition:.14s}
+  .ppick .tile{width:32px;height:32px;border-radius:9px}
+  .chips{display:flex;gap:7px;flex-wrap:wrap}
+  .chip{padding:6px 13px;border-radius:8px;background:var(--soft);color:var(--dim);cursor:pointer;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;font-weight:600;transition:.14s}
   .chip:hover{color:var(--txt)}
   .chip.sel{background:rgba(61,220,151,.14);color:var(--grn)}
   @media(max-width:720px){.sidebar{width:64px;padding:18px 8px}.brand span:not(.logo),.navitem{font-size:0}.navitem{justify-content:center}.nlabel,.side-foot a,.side-foot button,.side-foot>div{display:none}main{padding:24px 18px}}
@@ -227,18 +229,21 @@ let curTab="keys";
 function nav(t){curTab=t;document.querySelectorAll(".navitem").forEach(e=>e.classList.toggle("on",e.dataset.t===t));["keys","tokens","models","activity"].forEach(s=>document.getElementById("t_"+s).classList.toggle("hide",s!==t));refreshTab()}
 function refreshTab(){if(!A())return;({keys:refreshKeys,tokens:refreshTokens,models:refreshAliases,activity:refreshLogs}[curTab]||(()=>{}))()}
 
-const MARK={
-  anthropic:'<path d="M9.6 3 3 21h4.1l1.2-3.5h5.9L15.4 21H20L13.4 3H9.6Zm-.4 10.5 1.9-5.4 2 5.4H9.2Z"/>',
-  openai:'<path d="M12 2.6c1.9 0 3.5 1.3 4 3a4.2 4.2 0 0 1 2.3 6.8 4.2 4.2 0 0 1-4 5.8 4.2 4.2 0 0 1-8.6-1A4.2 4.2 0 0 1 5.7 12 4.2 4.2 0 0 1 8 5.5a4.2 4.2 0 0 1 4-2.9Zm0 4.6a4.8 4.8 0 1 0 0 9.6 4.8 4.8 0 0 0 0-9.6Z"/>',
-  gemini:'<path d="M12 2c.4 4.6 3.4 7.6 8 8-4.6.4-7.6 3.4-8 8-.4-4.6-3.4-7.6-8-8 4.6-.4 7.6-3.4 8-8Z"/>',
-  xai:'<path d="M4 4h3.2l4 5.6L15.8 4H19l-6 8 6.2 8h-3.2l-4.4-6L7 20H4l6.4-8.4L4 4Z"/>',
+// Real brand glyphs (official logos), embedded — render offline, recolored to currentColor.
+const ICON={
+  anthropic:{vb:"0 0 24 24",d:"M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z"},
+  gemini:{vb:"0 0 24 24",d:"M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"},
+  mistral:{vb:"0 0 24 24",d:"M17.143 3.429v3.428h-3.429v3.429h-3.428V6.857H6.857V3.43H3.43v13.714H0v3.428h10.286v-3.428H6.857v-3.429h3.429v3.429h3.429v-3.429h3.428v3.429h-3.428v3.428H24v-3.428h-3.43V3.429z"},
+  xai:{vb:"0 0 24 24",d:"M14.234 10.162 22.977 0h-2.072l-7.591 8.824L7.251 0H.258l9.168 13.343L.258 24H2.33l8.016-9.318L16.749 24h6.993zm-2.837 3.299-.929-1.329L3.076 1.56h3.182l5.965 8.532.929 1.329 7.754 11.09h-3.182z"},
+  openrouter:{vb:"0 0 24 24",d:"M16.778 1.844v1.919q-.569-.026-1.138-.032-.708-.008-1.415.037c-1.93.126-4.023.728-6.149 2.237-2.911 2.066-2.731 1.95-4.14 2.75-.396.223-1.342.574-2.185.798-.841.225-1.753.333-1.751.333v4.229s.768.108 1.61.333c.842.224 1.789.575 2.185.799 1.41.798 1.228.683 4.14 2.75 2.126 1.509 4.22 2.11 6.148 2.236.88.058 1.716.041 2.555.005v1.918l7.222-4.168-7.222-4.17v2.176c-.86.038-1.611.065-2.278.021-1.364-.09-2.417-.357-3.979-1.465-2.244-1.593-2.866-2.027-3.68-2.508.889-.518 1.449-.906 3.822-2.59 1.56-1.109 2.614-1.377 3.978-1.466.667-.044 1.418-.017 2.278.02v2.176L24 6.014Z"},
+  openai:{vb:"0 0 256 260",d:"M239.184 106.203a64.716 64.716 0 0 0-5.576-53.103C219.452 28.459 191 15.784 163.213 21.74A65.586 65.586 0 0 0 52.096 45.22a64.716 64.716 0 0 0-43.23 31.36c-14.31 24.602-11.061 55.634 8.033 76.74a64.665 64.665 0 0 0 5.525 53.102c14.174 24.65 42.644 37.324 70.446 31.36a64.72 64.72 0 0 0 48.754 21.744c28.481.025 53.714-18.361 62.414-45.481a64.767 64.767 0 0 0 43.229-31.36c14.137-24.558 10.875-55.423-8.083-76.483Zm-97.56 136.338a48.397 48.397 0 0 1-31.105-11.255l1.535-.87 51.67-29.825a8.595 8.595 0 0 0 4.247-7.367v-72.85l21.845 12.636c.218.111.37.32.409.563v60.367c-.056 26.818-21.783 48.545-48.601 48.601Zm-104.466-44.61a48.345 48.345 0 0 1-5.781-32.589l1.534.921 51.722 29.826a8.339 8.339 0 0 0 8.441 0l63.181-36.425v25.221a.87.87 0 0 1-.358.665l-52.335 30.184c-23.257 13.398-52.97 5.431-66.404-17.803ZM23.549 85.38a48.499 48.499 0 0 1 25.58-21.333v61.39a8.288 8.288 0 0 0 4.195 7.316l62.874 36.272-21.845 12.636a.819.819 0 0 1-.767 0L41.353 151.53c-23.211-13.454-31.171-43.144-17.804-66.405v.256Zm179.466 41.695-63.08-36.63L161.73 77.86a.819.819 0 0 1 .768 0l52.233 30.184a48.6 48.6 0 0 1-7.316 87.635v-61.391a8.544 8.544 0 0 0-4.4-7.213Zm21.742-32.69-1.535-.922-51.619-30.081a8.39 8.39 0 0 0-8.492 0L99.98 99.808V74.587a.716.716 0 0 1 .307-.665l52.233-30.133a48.652 48.652 0 0 1 72.236 50.391v.205ZM88.061 139.097l-21.845-12.585a.87.87 0 0 1-.41-.614V65.685a48.652 48.652 0 0 1 79.757-37.346l-1.535.87-51.67 29.825a8.595 8.595 0 0 0-4.246 7.367l-.051 72.697Zm11.868-25.58 28.138-16.217 28.188 16.218v32.434l-28.086 16.218-28.188-16.218-.052-32.434Z"},
+  deepseek:{vb:"0 0 24 24",d:"M23.748 4.651c-.254-.124-.364.113-.512.233-.051.04-.094.09-.137.137-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.155-.708-.311-.955-.65-.172-.24-.219-.509-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.094.172.187.129.323-.082.28-.18.553-.266.833-.055.179-.137.218-.328.14a5.5 5.5 0 0 1-1.737-1.179c-.857-.828-1.631-1.743-2.597-2.46a12 12 0 0 0-.689-.47c-.985-.957.13-1.743.387-1.836.27-.098.094-.433-.778-.428-.872.003-1.67.295-2.687.685a3 3 0 0 1-.465.136 9.6 9.6 0 0 0-2.883-.101c-1.885.21-3.39 1.1-4.497 2.622C.082 8.776-.231 10.854.152 13.02c.403 2.284 1.568 4.175 3.36 5.653 1.857 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.132-.284 4.994-1.86.47.234.962.328 1.78.398.629.058 1.235-.031 1.705-.129.735-.155.684-.836.418-.961-2.155-1.004-1.682-.595-2.112-.926 1.095-1.295 2.768-3.598 3.284-6.733.05-.346.115-.834.108-1.114-.004-.171.035-.238.23-.257a4.2 4.2 0 0 0 1.545-.475c1.397-.763 1.96-2.016 2.093-3.517.02-.23-.004-.467-.247-.588M11.58 18.168c-2.088-1.642-3.101-2.183-3.52-2.16-.39.024-.32.472-.234.763.09.288.207.487.371.74.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.168-1.361-.801-2.5-1.86-3.301-3.306-.775-1.393-1.225-2.888-1.299-4.482-.02-.385.094-.522.477-.592a4.7 4.7 0 0 1 1.53-.038c2.131.311 3.946 1.264 5.467 2.774.868.86 1.525 1.887 2.202 2.89.72 1.066 1.494 2.082 2.48 2.915.348.291.626.513.892.677-.802.09-2.14.109-3.055-.615zm1.001-6.44a.306.306 0 0 1 .415-.287.3.3 0 0 1 .113.074.3.3 0 0 1 .086.214c0 .17-.136.307-.308.307a.303.303 0 0 1-.306-.307m3.11 1.596c-.2.081-.4.151-.591.16a1.25 1.25 0 0 1-.798-.254c-.274-.23-.47-.358-.551-.758a1.7 1.7 0 0 1 .015-.588c.07-.327-.007-.537-.238-.727-.188-.156-.426-.199-.689-.199a.6.6 0 0 1-.254-.078.253.253 0 0 1-.114-.358 1 1 0 0 1 .192-.21c.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.392.451.462.576.685.915.176.264.336.536.446.848.066.194-.02.353-.25.45"},
 };
-const SLUG={anthropic:"anthropic",openai:"openai",gemini:"googlegemini",groq:"groq",mistral:"mistralai",deepseek:"deepseek",xai:"x"};
-function hexa(h,a){const n=h.replace("#","");const x=parseInt(n.length===3?n.split("").map(c=>c+c).join(""):n,16);return `rgba(${(x>>16)&255},${(x>>8)&255},${x&255},${a})`}
+function hexa(h,a){const n=(h||"#888").replace("#","");const x=parseInt(n.length===3?n.split("").map(c=>c+c).join(""):n,16);return `rgba(${(x>>16)&255},${(x>>8)&255},${x&255},${a})`}
 function logo(name,color){color=color||"#888";
-  const mark=MARK[name]?`<svg viewBox="0 0 24 24" width="21" height="21" fill="currentColor">${MARK[name]}</svg>`:`<b>${(name[0]||"?").toUpperCase()}</b>`;
-  const inner=SLUG[name]?`<img src="https://cdn.simpleicons.org/${SLUG[name]}/${color.replace("#","")}" alt="${name}" onerror="this.closest('.tile').classList.add('fb')"/><span class="fbm">${mark}</span>`:`<span class="fbm" style="display:flex">${mark}</span>`;
-  return `<div class="tile" style="background:${hexa(color,.14)};color:${color}">${inner}</div>`}
+  const ic=ICON[name];
+  const inner=ic?`<svg viewBox="${ic.vb}" width="20" height="20" fill="currentColor">${`<path d="${ic.d}"/>`}</svg>`:`<b>${(name[0]||"?").toUpperCase()}</b>`;
+  return `<div class="tile" style="background:${hexa(color,.16)};color:${color}">${inner}</div>`}
 
 function fieldsFor(uid,kind){
   if(kind==="bedrock")return `<div class="row"><input id="f1_${uid}" placeholder="AWS access key id" style="flex:1"/><input id="f3_${uid}" placeholder="region (us-east-1)" style="width:150px"/></div><input id="f2_${uid}" type="password" placeholder="AWS secret access key" style="margin-top:8px"/>`;
