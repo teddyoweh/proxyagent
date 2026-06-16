@@ -98,7 +98,7 @@ once and they're stored **encrypted** (`proxy_agent_keys`) — locally in SQLite
 export PROXYAGENT_SECRET_KEY=…                 # enables at-rest encryption (Fernet)
 proxyagent provider add anthropic --key sk-ant-…          # stored, encrypted
 proxyagent provider add openai --key sk-…  --kind api_key
-# OAuth: store an access token →  proxyagent provider add anthropic --key <oauth-token> --kind oauth
+# OAuth: store an access token (+ refresh_token/token_url in meta → auto-refreshed before expiry)
 proxyagent provider ls
 
 # Postgres-backed (shared, multi-instance): tables proxy_agent_keys / _tokens / _calls

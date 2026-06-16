@@ -161,6 +161,15 @@ class Store:
         cur = self.db.execute("DELETE FROM proxy_agent_keys WHERE id=?", (cid,))
         return cur.rowcount > 0
 
+    def refresh_credential(self, cid, new_secret, *, expires_ms=None):
+        """Persist a refreshed access token (+ new expiry in meta) for an OAuth cred."""
+        r = self.db.fetchone("SELECT meta_json FROM proxy_agent_keys WHERE id=?", (cid,))
+        meta = json.loads(r["meta_json"]) if r and r.get("meta_json") else {}
+        if expires_ms is not None:
+            meta["expires_ms"] = expires_ms
+        self.db.execute("UPDATE proxy_agent_keys SET secret=?, meta_json=?, masked=? WHERE id=?",
+                        (crypto.encrypt(new_secret), json.dumps(meta), mask(new_secret), cid))
+
     # -- call traces (proxy_agent_calls) ----------------------------------- #
 
     def log_request(self, **kw):

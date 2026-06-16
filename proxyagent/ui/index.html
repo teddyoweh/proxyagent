@@ -190,7 +190,7 @@ async function refreshTokens(){const d=await(await api("/admin/tokens")).json();
   document.getElementById("toks").innerHTML=d.tokens.map(t=>`<tr><td class="mono">${t.id}</td><td>${t.label||""}</td><td class="mono">${t.masked||""}</td><td class="mono">${(t.scope||[]).join(", ")}</td><td class="mono">${t.budget_usd?('$'+(t.spent_usd||0).toFixed(4)+' / $'+(+t.budget_usd).toFixed(2)):'—'}</td><td>${t.revoked?'<span class="pill no">revoked</span>':'<span class="pill ok">active</span>'}</td><td>${t.revoked?"":`<button class="danger sm" onclick="revokeTok('${t.id}')">revoke</button>`}</td></tr>`).join("")}
 async function mintToken(){const body={label:val("tk_label")||"machine",scope:(val("tk_scope")||"*").split(",").map(s=>s.trim()),ttl_seconds:parseInt(val("tk_ttl"))||null,budget_usd:parseFloat(val("tk_budget"))||null};
   const d=await(await api("/admin/tokens",{method:"POST",body:JSON.stringify(body)})).json();
-  const el=document.getElementById("tk_out");el.classList.remove("hide");el.innerHTML=`<b>Token (shown once):</b><br/><span class="mono">${d.token}</span>`;refreshTokens()}
+  const el=document.getElementById("tk_out");el.classList.remove("hide");el.innerHTML=`<b>Token (shown once):</b> <button class="ghost sm" onclick="navigator.clipboard.writeText('${d.token}');this.textContent='copied'">copy</button><br/><span class="mono">${d.token}</span>`;refreshTokens()}
 async function revokeTok(id){await api("/admin/tokens/"+id,{method:"DELETE"});refreshTokens()}
 
 async function refreshAliases(){const m=(await(await api("/admin/aliases")).json()).map;

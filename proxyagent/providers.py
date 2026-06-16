@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import fnmatch
 import json
+import time
 
 import httpx
 
@@ -60,7 +61,19 @@ def build_plans(provider, store: Store | None, body: dict) -> list[tuple]:
             if kind == "api_key":
                 plans.append((provider.endpoint, {**JSON, **_headers_for(provider, c["secret"], "api_key")}, raw))
             elif kind == "oauth":
-                plans.append((provider.endpoint, {**JSON, "Authorization": f"Bearer {c['secret']}", **provider.extra_headers}, raw))
+                secret = c["secret"]
+                exp = meta.get("expires_ms")
+                # refresh the access token if it's expired (or within 60s) and refreshable
+                if exp and exp < int(time.time() * 1000) + 60_000 and meta.get("refresh_token") and meta.get("token_url"):
+                    try:
+                        res = signers.oauth_refresh(c)
+                        if res:
+                            secret, ttl = res
+                            store.refresh_credential(c["id"], secret,
+                                                     expires_ms=int(time.time() * 1000) + ttl * 1000)
+                    except Exception:  # noqa: BLE001 — fall back to the existing token
+                        pass
+                plans.append((provider.endpoint, {**JSON, "Authorization": f"Bearer {secret}", **provider.extra_headers}, raw))
             elif kind == "azure":
                 ep = (meta.get("endpoint") or "").rstrip("/")
                 if ep:

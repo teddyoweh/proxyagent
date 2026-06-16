@@ -315,3 +315,16 @@ def test_redact_secrets():
     assert "a@b.com" not in s and "***@***" in s
     assert "Bearer ***" in s and "AKIA***" in s
     assert redact(None) is None and redact("") == ""
+
+
+def test_oauth_refresh_helpers():
+    from proxyagent.signers import oauth_refresh
+    assert oauth_refresh({"meta": {}}) is None            # not refreshable → None
+    assert oauth_refresh({"secret": "x"}) is None
+    # store.refresh_credential swaps the access token + updates expiry in meta
+    s = Store(":memory:")
+    cid = s.add_credential("anthropic", "old-tok", kind="oauth",
+                           meta={"refresh_token": "r", "token_url": "https://x/t", "expires_ms": 1})
+    s.refresh_credential(cid, "new-tok", expires_ms=999999999999)
+    c = s.get_credentials("anthropic", kind="oauth")[0]
+    assert c["secret"] == "new-tok" and (c["meta"] or {}).get("expires_ms") == 999999999999

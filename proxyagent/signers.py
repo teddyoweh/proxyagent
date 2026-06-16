@@ -152,3 +152,26 @@ def vertex_plan(cred: dict, body: dict):
     raw = json.dumps(payload).encode("utf-8")
     headers = {"content-type": "application/json", "Authorization": f"Bearer {vertex_access_token(sa)}"}
     return vertex_url(project, region, body.get("model", "")), headers, raw
+
+
+# ------------------------------------------------------------------ #
+# Generic OAuth2 refresh — renew a stored access token before it expires.
+# ------------------------------------------------------------------ #
+
+def oauth_refresh(cred: dict):
+    """Exchange a stored refresh_token for a fresh access token. Returns (access_token,
+    expires_in_seconds) or None if the cred isn't refreshable."""
+    import httpx
+    meta = cred.get("meta") or {}
+    token_url, refresh = meta.get("token_url"), meta.get("refresh_token")
+    if not (token_url and refresh):
+        return None
+    data = {"grant_type": "refresh_token", "refresh_token": refresh}
+    if meta.get("client_id"):
+        data["client_id"] = meta["client_id"]
+    if meta.get("client_secret"):
+        data["client_secret"] = meta["client_secret"]
+    r = httpx.post(token_url, data=data, timeout=20)
+    r.raise_for_status()
+    b = r.json()
+    return b["access_token"], int(b.get("expires_in", 3600))
