@@ -37,7 +37,7 @@
   table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:11px 12px;font-size:13px;vertical-align:middle}
   thead th{color:var(--dim);font-weight:520;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
   tbody tr{transition:background .12s}tbody tr:hover{background:#1a1d23}
-  .pill{padding:3px 10px;border-radius:8px;font-size:11px}.pill.ok{background:rgba(52,211,158,.13);color:var(--grn)}.pill.no{background:rgba(246,120,138,.13);color:var(--red)}
+  .pill{padding:3px 10px;border-radius:8px;font-size:11px}.pill.ok{background:rgba(52,211,158,.13);color:var(--grn)}.pill.no{background:rgba(246,120,138,.13);color:var(--red)}.pill.warn{background:rgba(231,178,74,.15);color:#e7b24a}
   .gate{max-width:430px;margin:100px auto;text-align:center}.gate input{margin:14px 0}
   .tok{background:var(--panel2);padding:13px;border-radius:12px;word-break:break-all;margin-top:13px;font-size:13px}
   .hide{display:none}.muted{color:var(--dim)}.h{display:flex;justify-content:space-between;align-items:center;margin:0 0 16px}
@@ -183,6 +183,11 @@ async function submitCred(uid,provider){
   await api("/admin/providers",{method:"POST",body:JSON.stringify({provider,secret,kind,meta})});refreshKeys();return true;
 }
 async function disconnect(id){await api("/admin/providers/"+id,{method:"DELETE"});refreshKeys()}
+async function testKey(id){const el=document.getElementById("st_"+id);if(el)el.innerHTML='<span class="muted" style="font-size:11px">testing…</span>';
+  try{const r=await(await api("/admin/providers/"+id+"/test",{method:"POST"})).json();
+    const cls=r.ok?"ok":(r.reachable?"warn":"no");const txt=r.ok?`ok ${r.latency_ms}ms`:(r.reachable?`${r.status}`:"unreachable");
+    if(el)el.innerHTML=`<span class="pill ${cls}" title="${(r.detail||'').replace(/"/g,'')}">${txt}</span>`;
+  }catch(e){if(el)el.innerHTML='<span class="pill no">error</span>'}}
 
 let CATALOG=[],cfProvider=null;
 async function boot(){
@@ -202,7 +207,7 @@ async function refreshKeys(){
   const keys=[];d.providers.forEach(p=>{(p.creds||[]).forEach(c=>keys.push({...c,provider:p.name,plabel:p.label,color:p.color}));if(p.via_env)keys.push({provider:p.name,plabel:p.label,color:p.color,kind:"api_key",masked:"env",id:null})});
   document.getElementById("s_keys").textContent=keys.length;
   document.getElementById("keylist").innerHTML=keys.length
-    ?`<div class="card"><table><thead><tr><th></th><th>Provider</th><th>Auth type</th><th>Key</th><th></th></tr></thead><tbody>${keys.map(k=>`<tr><td style="width:50px">${logo(k.provider,k.color)}</td><td>${k.plabel}</td><td><span class="badge on">${k.kind}</span></td><td class="mono">${k.masked||""}</td><td>${k.id?`<button class="danger sm" onclick="disconnect('${k.id}')">remove</button>`:'<span class="muted" style="font-size:11px">from env</span>'}</td></tr>`).join("")}</tbody></table></div>`
+    ?`<div class="card"><table><thead><tr><th></th><th>Provider</th><th>Auth type</th><th>Key</th><th>Status</th><th></th></tr></thead><tbody>${keys.map(k=>`<tr><td style="width:50px">${logo(k.provider,k.color)}</td><td>${k.plabel}</td><td><span class="badge on">${k.kind}</span></td><td class="mono">${k.masked||""}</td><td id="st_${k.id||'env'}"><span class="muted" style="font-size:11px">—</span></td><td>${k.id?`<button class="ghost sm" onclick="testKey('${k.id}')">test</button> <button class="danger sm" onclick="disconnect('${k.id}')">remove</button>`:'<span class="muted" style="font-size:11px">from env</span>'}</td></tr>`).join("")}</tbody></table></div>`
     :`<div class="card empty">No access keys yet.<br/><span style="font-size:12.5px">Click <b style="color:var(--txt)">+ Create access key</b> to add one.</span></div>`;
 }
 // create flow (modal)

@@ -330,6 +330,53 @@ def test_oauth_refresh_helpers():
     assert c["secret"] == "new-tok" and (c["meta"] or {}).get("expires_ms") == 999999999999
 
 
+def test_plan_for_credential_per_kind():
+    from proxyagent.providers import plan_for_credential
+    from proxyagent.config import PROVIDERS
+    body = {"model": "claude-3-5-haiku", "max_tokens": 1, "messages": []}
+    # api_key → provider endpoint + x-api-key header
+    url, hdrs, raw = plan_for_credential(PROVIDERS["anthropic"], {"kind": "api_key", "secret": "sk-x"}, body)
+    assert url == PROVIDERS["anthropic"].endpoint and hdrs["x-api-key"] == "sk-x"
+    # oauth → Bearer
+    _, h2, _ = plan_for_credential(PROVIDERS["openai"], {"kind": "oauth", "secret": "tok"}, body)
+    assert h2["Authorization"] == "Bearer tok"
+    # azure with no endpoint → None (can't build a plan)
+    assert plan_for_credential(PROVIDERS["openai"], {"kind": "azure", "secret": "k", "meta": {}}, body) is None
+    # azure with endpoint → that URL + api-key header
+    u3, h3, _ = plan_for_credential(PROVIDERS["openai"],
+                                    {"kind": "azure", "secret": "k", "meta": {"endpoint": "https://az/x"}}, body)
+    assert u3 == "https://az/x" and h3["api-key"] == "k"
+
+
+def test_credential_test_endpoint_404():
+    c = _client()
+    # unknown credential id → 404, no network
+    assert c.post("/admin/providers/key_nope/test", headers=ADMIN).status_code == 404
+    # admin-gated
+    assert c.post("/admin/providers/key_nope/test").status_code == 401
+
+
+def test_test_credential_unreachable(monkeypatch):
+    """A credential pointed at a dead host reports reachable=False (network error caught)."""
+    import asyncio
+    from proxyagent.providers import test_credential
+    from proxyagent.config import Config
+    cfg = Config.load()
+    cred = {"provider": "anthropic", "kind": "api_key", "secret": "sk-x",
+            "meta": {}, "id": "key_x"}
+
+    class _BoomClient:
+        def __init__(self, *a, **k): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def post(self, *a, **k): raise ConnectionError("no route to host")
+
+    monkeypatch.setattr("proxyagent.providers.httpx.AsyncClient", _BoomClient)
+    res = asyncio.new_event_loop().run_until_complete(test_credential(cfg, "anthropic", cred))
+    assert res["ok"] is False and res["reachable"] is False
+    assert "ConnectionError" in res["detail"]
+
+
 def test_log_retention_trim():
     from proxyagent.store import now_ms
     s = Store(":memory:")

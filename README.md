@@ -72,7 +72,9 @@ claude -p "ship it"
 
 - **Access keys** — the credentials you create. Each is a provider + an auth type
   (Anthropic · API key, Anthropic · Bedrock, OpenAI · Azure, …); pick the type, enter the
-  key/fields, done. Listed with provider logo · auth type · masked key · remove.
+  key/fields, done. Listed with provider logo · auth type · masked key · **test** · remove.
+  **Test** pings the real upstream with that one credential and shows ok / auth-failed /
+  unreachable — so you catch a bad key the moment you add it.
 - **Machine tokens** — mint (scoped / TTL / budget), list, revoke.
 - **Model routing** — add/remove model remaps (e.g. `* → mock` for offline).
 - **Activity** — **spend-by-token** breakdown (requests · tokens · cost · budget %), a live

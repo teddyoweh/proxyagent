@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from . import aliases, cache, crypto
 from .config import (AUTH_LABELS, AUTH_READY, CATALOG, HARNESSES, Config, PROVIDERS,
                      provider_rate_limit)
-from .providers import forward, scope_allows
+from .providers import forward, scope_allows, test_credential
 from .security import token_matches
 from .store import Store, now_ms
 from .tools import ToolRegistry
@@ -299,6 +299,16 @@ def create_app(config: Config | None = None) -> FastAPI:
         if not store.remove_credential(cid):
             raise HTTPException(404, "no such credential")
         return {"ok": True}
+
+    @app.post("/admin/providers/{cid}/test")
+    async def test_provider(cid: str, authorization: str | None = Header(None),
+                            x_admin_token: str | None = Header(None)):
+        """Ping the upstream with this stored credential and report ok / fail."""
+        require_admin(authorization, x_admin_token)
+        cred = store.get_credential_by_id(cid)
+        if not cred:
+            raise HTTPException(404, "no such credential")
+        return await test_credential(config, cred["provider"], cred)
 
     @app.get("/admin/harnesses")
     async def harnesses(authorization: str | None = Header(None),

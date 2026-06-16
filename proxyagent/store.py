@@ -150,6 +150,11 @@ class Store:
             args.append(kind)
         return [self._decrypt_row(r) for r in self.db.fetchall(q + " ORDER BY created_ms", tuple(args))]
 
+    def get_credential_by_id(self, cid):
+        """A single credential by its id, decrypted — for connection-testing."""
+        r = self.db.fetchone("SELECT * FROM proxy_agent_keys WHERE id=?", (cid,))
+        return self._decrypt_row(r) if r else None
+
     def list_credentials(self):
         rows = self.db.fetchall("SELECT * FROM proxy_agent_keys ORDER BY created_ms DESC")
         # never return the secret material

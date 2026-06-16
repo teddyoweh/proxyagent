@@ -48,48 +48,59 @@ def resolve_auth(provider, store: Store | None) -> tuple[dict, bool]:
     return (cands[0], True) if cands else ({}, False)
 
 
-def build_plans(provider, store: Store | None, body: dict) -> list[tuple]:
-    """Every way to fulfil this request, in rotation order, as (url, headers, body_bytes).
-    Each credential kind maps to its own upstream + signing: api_key/oauth → the provider
-    endpoint; azure → a custom deployment URL; bedrock → SigV4-signed Claude-on-Bedrock."""
-    plans: list[tuple] = []
+def plan_for_credential(provider, c: dict, body: dict, *, store: Store | None = None) -> tuple | None:
+    """Map ONE credential to a concrete (url, headers, body_bytes), per its auth kind:
+    api_key/oauth → the provider endpoint; azure → a custom deployment URL; bedrock →
+    SigV4-signed Claude-on-Bedrock; vertex → SA-token Claude-on-Vertex. Returns None if the
+    credential can't produce a plan (e.g. azure with no endpoint, malformed bedrock/vertex)."""
     raw = json.dumps(body).encode("utf-8")
     JSON = {"content-type": "application/json"}
+    kind, meta = c["kind"], (c.get("meta") or {})
+    if kind == "api_key":
+        return (provider.endpoint, {**JSON, **_headers_for(provider, c["secret"], "api_key")}, raw)
+    if kind == "oauth":
+        secret = c["secret"]
+        exp = meta.get("expires_ms")
+        # refresh the access token if it's expired (or within 60s) and refreshable
+        if (store and exp and exp < int(time.time() * 1000) + 60_000
+                and meta.get("refresh_token") and meta.get("token_url")):
+            try:
+                res = signers.oauth_refresh(c)
+                if res:
+                    secret, ttl = res
+                    store.refresh_credential(c["id"], secret,
+                                             expires_ms=int(time.time() * 1000) + ttl * 1000)
+            except Exception:  # noqa: BLE001 — fall back to the existing token
+                pass
+        return (provider.endpoint, {**JSON, "Authorization": f"Bearer {secret}", **provider.extra_headers}, raw)
+    if kind == "azure":
+        ep = (meta.get("endpoint") or "").rstrip("/")
+        return (ep, {**JSON, "api-key": c["secret"]}, raw) if ep else None
+    if kind == "bedrock":
+        try:
+            return signers.bedrock_plan(c, body)
+        except Exception:  # noqa: BLE001 — malformed bedrock cred
+            return None
+    if kind == "vertex":
+        try:
+            return signers.vertex_plan(c, body)
+        except Exception:  # noqa: BLE001 — SA invalid / token fetch fails
+            return None
+    return None
+
+
+def build_plans(provider, store: Store | None, body: dict) -> list[tuple]:
+    """Every way to fulfil this request, in rotation order, as (url, headers, body_bytes).
+    The forwarder tries them in turn, rotating past any that 429/5xx — that's the failover."""
+    plans: list[tuple] = []
     if store:
         for c in store.get_credentials(provider.name):
-            kind, meta = c["kind"], (c.get("meta") or {})
-            if kind == "api_key":
-                plans.append((provider.endpoint, {**JSON, **_headers_for(provider, c["secret"], "api_key")}, raw))
-            elif kind == "oauth":
-                secret = c["secret"]
-                exp = meta.get("expires_ms")
-                # refresh the access token if it's expired (or within 60s) and refreshable
-                if exp and exp < int(time.time() * 1000) + 60_000 and meta.get("refresh_token") and meta.get("token_url"):
-                    try:
-                        res = signers.oauth_refresh(c)
-                        if res:
-                            secret, ttl = res
-                            store.refresh_credential(c["id"], secret,
-                                                     expires_ms=int(time.time() * 1000) + ttl * 1000)
-                    except Exception:  # noqa: BLE001 — fall back to the existing token
-                        pass
-                plans.append((provider.endpoint, {**JSON, "Authorization": f"Bearer {secret}", **provider.extra_headers}, raw))
-            elif kind == "azure":
-                ep = (meta.get("endpoint") or "").rstrip("/")
-                if ep:
-                    plans.append((ep, {**JSON, "api-key": c["secret"]}, raw))
-            elif kind == "bedrock":
-                try:
-                    plans.append(signers.bedrock_plan(c, body))
-                except Exception:  # noqa: BLE001 — skip a malformed bedrock cred
-                    pass
-            elif kind == "vertex":
-                try:
-                    plans.append(signers.vertex_plan(c, body))
-                except Exception:  # noqa: BLE001 — skip if SA invalid / token fetch fails
-                    pass
+            plan = plan_for_credential(provider, c, body, store=store)
+            if plan:
+                plans.append(plan)
     if provider.key:
-        plans.append((provider.endpoint, {**JSON, **provider.auth_headers()}, raw))
+        plans.append((provider.endpoint, {"content-type": "application/json", **provider.auth_headers()},
+                      json.dumps(body).encode("utf-8")))
     return plans
 
 
@@ -194,6 +205,44 @@ async def forward(
             return resp.status_code, {"content-type": "application/json"}, payload, None
     _log(last_status, None, None, "all credentials failed")
     return last_status, {"content-type": "application/json"}, last_payload, None
+
+
+def _ping_body(provider, model: str | None) -> dict:
+    """A minimal, cheap request to validate a credential reaches + authenticates upstream."""
+    from .config import CATALOG
+    model = model or (CATALOG.get(provider.name, {}).get("models") or ["claude-3-5-haiku"])[0]
+    body = {"model": model, "max_tokens": 1, "messages": [{"role": "user", "content": "ping"}]}
+    if provider.shape == "anthropic":
+        body["anthropic_version"] = "2023-06-01"
+    return body
+
+
+async def test_credential(config, provider_name: str, cred: dict, *, model: str | None = None) -> dict:
+    """Ping the real upstream with ONE stored credential and report whether it works.
+    A 2xx/4xx means the endpoint is reachable; 200 = the credential authenticates. Network
+    errors mean unreachable. Never returns secret material."""
+    provider = PROVIDERS[provider_name]
+    body = _ping_body(provider, model)
+    plan = plan_for_credential(provider, cred, body)
+    if not plan:
+        return {"ok": False, "reachable": False, "kind": cred.get("kind"),
+                "detail": f"could not build a request for a '{cred.get('kind')}' credential "
+                          f"(missing config — e.g. azure endpoint or region)"}
+    url, headers, raw = plan
+    t0 = now_ms()
+    try:
+        async with httpx.AsyncClient(timeout=min(config.request_timeout, 20)) as client:
+            resp = await client.post(url, headers=headers, content=raw)
+    except Exception as e:  # noqa: BLE001 — DNS/connect/timeout → unreachable
+        return {"ok": False, "reachable": False, "kind": cred.get("kind"),
+                "latency_ms": now_ms() - t0, "detail": redact.redact(f"{type(e).__name__}: {e}")[:200]}
+    ok = resp.is_success
+    auth_fail = resp.status_code in (401, 403)
+    detail = ("authenticated" if ok else
+              "authentication failed — bad credential" if auth_fail else
+              f"reachable, upstream returned {resp.status_code}")
+    return {"ok": ok, "reachable": True, "status": resp.status_code, "kind": cred.get("kind"),
+            "auth_ok": not auth_fail, "latency_ms": now_ms() - t0, "detail": detail}
 
 
 # ------------------------------------------------------------------ #
