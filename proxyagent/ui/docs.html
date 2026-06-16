@@ -1,0 +1,202 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>proxyagent · docs</title>
+<style>
+  :root{--bg:#08090b;--panel:#16181d;--panel2:#1e2127;--soft:#22262e;--side:#101216;--txt:#eef0f3;--dim:#8a909a;--grn:#34d39e;--red:#f6788a;--line:#23262d}
+  *{box-sizing:border-box}html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.65 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto;-webkit-font-smoothing:antialiased}
+  a{color:var(--grn);text-decoration:none}a:hover{text-decoration:underline}
+  .wrap{display:flex;max-width:1180px;margin:0 auto;gap:40px;padding:0 28px}
+  .toc{position:sticky;top:0;align-self:flex-start;height:100vh;overflow:auto;padding:34px 0;width:210px;flex:none;font-size:13.5px}
+  .toc a{display:block;color:var(--dim);padding:5px 0}.toc a:hover{color:var(--txt);text-decoration:none}
+  .toc .grp{color:var(--txt);font-weight:650;margin:16px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.07em}
+  main{flex:1;min-width:0;padding:34px 0 120px}
+  .brand{display:flex;align-items:center;gap:11px;margin-bottom:6px}
+  .brand .logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#34d39e,#1f9d76);display:grid;place-items:center;color:#06281f;font-weight:800}
+  h1{font-size:30px;letter-spacing:-.02em;margin:.2em 0}
+  h2{font-size:21px;margin:2.1em 0 .5em;letter-spacing:-.01em;padding-top:8px;border-top:1px solid var(--line)}
+  h2:first-of-type{border-top:none}
+  h3{font-size:15.5px;margin:1.5em 0 .4em;color:var(--txt)}
+  p,li{color:#cfd3da}.lead{font-size:17px;color:var(--dim);max-width:60ch}
+  code{background:var(--panel2);padding:2px 6px;border-radius:6px;font:13px ui-monospace,SFMono-Regular,Menlo,monospace;color:#e6e8ec}
+  pre{position:relative;background:#0d0f13;border:1px solid var(--line);border-radius:12px;padding:15px 16px;overflow:auto;margin:12px 0}
+  pre code{background:none;padding:0;font-size:12.5px;line-height:1.6;color:#dfe3ea;white-space:pre}
+  pre .cp{position:absolute;top:8px;right:8px;background:var(--soft);color:var(--dim);border:none;border-radius:7px;padding:4px 9px;font-size:11px;cursor:pointer}
+  pre .cp:hover{color:var(--txt)}
+  .tag{color:var(--grn)}.cm{color:#6b7280}
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:13.5px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--dim);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+  .note{background:rgba(52,211,158,.08);border:1px solid rgba(52,211,158,.25);border-radius:10px;padding:12px 14px;margin:14px 0;font-size:14px}
+  .pill{display:inline-block;background:var(--soft);color:var(--dim);border-radius:7px;padding:2px 9px;font-size:12px;margin:0 4px 4px 0;font-family:ui-monospace,monospace}
+  .top{display:flex;gap:14px;align-items:center;margin:18px 0 6px}
+  .btn{background:var(--soft);color:var(--txt);border-radius:9px;padding:7px 13px;font-size:13px}
+  @media(max-width:820px){.toc{display:none}.wrap{padding:0 16px}}
+</style></head>
+<body>
+<div class="wrap">
+  <nav class="toc">
+    <div class="grp">Start</div>
+    <a href="#what">What it is</a>
+    <a href="#install">1 · Install</a>
+    <a href="#serve">2 · Run the proxy</a>
+    <a href="#keys">3 · Add a real key</a>
+    <a href="#token">4 · Mint a token</a>
+    <a href="#run">5 · Run an agent</a>
+    <div class="grp">Use</div>
+    <a href="#sdk">Python SDK</a>
+    <a href="#curl">Raw HTTP / curl</a>
+    <a href="#offline">Offline (mock)</a>
+    <a href="#tools">Proxied tools</a>
+    <div class="grp">Operate</div>
+    <a href="#limits">Budgets &amp; limits</a>
+    <a href="#deploy">Deploy</a>
+    <a href="#endpoints">Endpoints</a>
+    <a href="#env">Env vars</a>
+  </nav>
+  <main>
+    <div class="brand"><div class="logo">p</div><strong>proxyagent</strong> <span style="color:var(--dim)">docs</span></div>
+    <h1>Run any agent on any machine — with no API key on the machine.</h1>
+    <p class="lead">proxyagent is a secure, self-hosted proxy. It holds your real provider keys in one place; every machine that runs an agent gets only a scoped, revocable <code>pa_</code> token. The real key never leaves the proxy.</p>
+    <div class="top"><a class="btn" href="/">← Back to dashboard</a><a class="btn" href="https://github.com/teddyoweh/proxyagent" target="_blank">GitHub ↗</a></div>
+
+    <h2 id="what">What it is</h2>
+    <p>Every agent harness honours a <code>*_BASE_URL</code> env var. Point that base URL at proxyagent and hand the agent a machine token as its "API key". proxyagent authenticates the token, checks its scope/budget, <strong>swaps in the real key</strong>, forwards upstream, and logs the call.</p>
+    <pre><code>  remote machine                proxy (you host)          upstream
+┌───────────────┐  pa_ token  ┌─────────────────┐ real key ┌──────────┐
+│ claude / codex │ ─────────►  │ proxyagent serve │ ───────► │ Anthropic│
+│  (no real key) │ ◄─────────  │ scope·budget·log │ ◄─────── │  OpenAI  │
+└───────────────┘   stream    └─────────────────┘          └──────────┘</code></pre>
+
+    <h2 id="install">1 · Install</h2>
+    <pre><code>pip install proxyagent
+<span class="cm"># or, isolated as a CLI tool:</span>
+uv tool install proxyagent</code></pre>
+
+    <h2 id="serve">2 · Run the proxy</h2>
+    <p>Run this on a box <em>you</em> control — it's the only place real keys live. It prints an admin token and serves this dashboard.</p>
+    <pre><code>proxyagent serve
+<span class="cm"># → Admin token: pa_admin_…   ·   Dashboard: __ORIGIN__</span></code></pre>
+    <div class="note">Reveal the admin token anytime with <code>proxyagent admin-token</code>. Paste it into the dashboard login to manage keys, tokens, routing and activity.</div>
+
+    <h2 id="keys">3 · Add a real provider key</h2>
+    <p>Three ways — pick one. The key is stored encrypted (set <code>PROXYAGENT_SECRET_KEY</code>) or read from the environment; it's never returned or logged.</p>
+    <pre><code><span class="cm"># a) environment (simplest):</span>
+export ANTHROPIC_API_KEY=sk-ant-…
+export OPENAI_API_KEY=sk-…
+
+<span class="cm"># b) CLI (stored, encrypted):</span>
+proxyagent provider add anthropic --key sk-ant-…
+proxyagent provider add openai    --key sk-…
+
+<span class="cm"># c) the dashboard → Access keys → + Create access key (API key / OAuth / Bedrock / Azure / Vertex)</span></code></pre>
+    <p>A provider is a <strong>pool</strong>: add several keys (and auth types) and proxyagent rotates + fails over across them on 429/5xx.</p>
+
+    <h2 id="token">4 · Mint a machine token</h2>
+    <p>This is what the remote machine holds. Scope it, give it a TTL/budget, revoke it anytime.</p>
+    <pre><code>proxyagent token new macbook-01 --scope "anthropic:claude-*" --budget 5.00
+<span class="cm"># → pa_… (shown once)</span></code></pre>
+    <p>Or mint from the dashboard's <strong>Machine tokens</strong> tab (it shows a ready-to-run curl and a copy-<code>.env</code> snippet).</p>
+
+    <h2 id="run">5 · Run an agent — no real key on the machine</h2>
+    <h3>Claude Code (Anthropic)</h3>
+    <pre><code>export ANTHROPIC_BASE_URL=__ORIGIN__/anthropic
+export ANTHROPIC_API_KEY=pa_…        <span class="cm"># the machine token, NOT the real key</span>
+claude -p "ship it"</code></pre>
+    <h3>Codex (OpenAI)</h3>
+    <pre><code>export OPENAI_BASE_URL=__ORIGIN__/openai
+export OPENAI_API_KEY=pa_…
+codex "fix the failing tests"</code></pre>
+    <h3>Built-in runner</h3>
+    <pre><code>PROXYAGENT_TOKEN=pa_… proxyagent run claude-code \
+  --goal "build a SwiftUI todo app" --proxy __ORIGIN__</code></pre>
+
+    <h2 id="sdk">Python SDK</h2>
+    <pre><code><span class="cm"># point the official OpenAI client at the proxy:</span>
+from openai import OpenAI
+client = OpenAI(base_url="__ORIGIN__/openai/v1", api_key="pa_…")
+client.chat.completions.create(model="gpt-4o",
+    messages=[{"role":"user","content":"hi"}])
+
+<span class="cm"># host the proxy or manage it programmatically:</span>
+import proxyagent
+app   = proxyagent.create_app()                     <span class="cm"># ASGI app</span>
+admin = proxyagent.Admin("__ORIGIN__", "pa_admin_…")
+tok   = admin.mint("ci", scope=["anthropic:claude-*"], ttl_seconds=3600)</code></pre>
+
+    <h2 id="curl">Raw HTTP / curl</h2>
+    <pre><code>curl __ORIGIN__/anthropic/v1/messages \
+  -H "x-api-key: pa_…" \
+  -d '{"model":"claude-3-5-haiku","max_tokens":100,
+       "messages":[{"role":"user","content":"hello"}]}'</code></pre>
+    <p>OpenAI-shaped providers use <code>/&lt;provider&gt;/v1/chat/completions</code>; Anthropic uses <code>/anthropic/v1/messages</code>. List routable models at <code>/v1/models</code>.</p>
+
+    <h2 id="offline">Offline mode (no keys, no spend)</h2>
+    <p>Map every model to the built-in <code>mock</code> and the whole pipeline (auth, scope, budget, logging) runs end-to-end with zero keys — perfect for local dev, demos and CI.</p>
+    <pre><code>proxyagent alias set '*' mock
+curl __ORIGIN__/anthropic/v1/messages -H "x-api-key: pa_…" \
+  -d '{"model":"mock","max_tokens":50,"messages":[{"role":"user","content":"hi"}]}'</code></pre>
+
+    <h2 id="tools">Proxied tools &amp; the agentic loop</h2>
+    <p>proxyagent can hold your <em>tool</em> keys too. Send <code>x-proxyagent-tools: on</code> and it injects tool defs, then (non-streaming) runs the whole loop server-side: the model asks for a tool → proxyagent executes it (its key stays here) → feeds the result back → repeats until a final answer.</p>
+    <pre><code>export TAVILY_API_KEY=tvly-…                 <span class="cm"># web_search uses this; agents never see it</span>
+curl __ORIGIN__/anthropic/v1/messages \
+  -H "x-api-key: pa_…" -H "x-proxyagent-tools: on" \
+  -d '{"model":"claude-3-5-haiku","max_tokens":300,
+       "messages":[{"role":"user","content":"what happened today?"}]}'
+<span class="cm"># response header x-proxyagent-tool-steps: N  ·  cap with x-proxyagent-tool-steps-max</span></code></pre>
+
+    <h2 id="limits">Budgets, limits &amp; security</h2>
+    <pre><code>proxyagent token new ci --budget 5.00            <span class="cm"># per-token $ cap → 402 when hit</span>
+proxyagent token new ci --scope "anthropic:claude-*" --ttl 3600 --rate 60
+export PROXYAGENT_PROVIDER_BUDGETS='{"anthropic":200}' <span class="cm"># per-provider $ ceiling</span>
+export PROXYAGENT_PROVIDER_RATE_LIMITS='{"openai":1000}'
+export PROXYAGENT_BUDGET_WEBHOOK=https://hooks.you.com/… <span class="cm"># alert on cap crossing</span></code></pre>
+    <p>Tokens are stored hashed, scoped (<code>provider:model</code> globs), expiring, revocable, rate-limited, and optionally IP-locked (<code>allowed_ips</code> CIDRs). Real keys are read from env / stored encrypted and never logged.</p>
+
+    <h2 id="deploy">Deploy</h2>
+    <pre><code>docker compose up -d                 <span class="cm"># proxy at :8080; admin token in logs</span>
+docker compose --profile postgres up -d   <span class="cm"># shared Postgres backend</span>
+<span class="cm"># point at Postgres directly:</span>
+export PROXYAGENT_DATABASE_URL=postgresql://user:pass@host/db</code></pre>
+    <p>Health: <code>GET /healthz</code> (liveness) · <code>GET /readyz</code> (DB-ping readiness, 503 if down). Metrics: <code>GET /metrics</code> (Prometheus, incl. a latency histogram).</p>
+
+    <h2 id="endpoints">Endpoint reference</h2>
+    <table><thead><tr><th>Endpoint</th><th>Auth</th><th>What</th></tr></thead><tbody>
+      <tr><td><code>POST /&lt;provider&gt;/v1/chat/completions</code></td><td>machine token</td><td>OpenAI-shaped proxy</td></tr>
+      <tr><td><code>POST /&lt;provider&gt;/v1/messages</code></td><td>machine token</td><td>Anthropic-shaped proxy</td></tr>
+      <tr><td><code>GET /v1/models</code></td><td>machine token</td><td>routable model catalog</td></tr>
+      <tr><td><code>GET /healthz</code> · <code>/readyz</code></td><td>none</td><td>liveness / readiness</td></tr>
+      <tr><td><code>GET /metrics</code></td><td>admin*</td><td>Prometheus metrics</td></tr>
+      <tr><td><code>/admin/tokens</code> · <code>/admin/providers</code></td><td>admin</td><td>manage tokens / credentials</td></tr>
+      <tr><td><code>GET /admin/summary</code></td><td>admin</td><td>Markdown status report</td></tr>
+    </tbody></table>
+
+    <h2 id="env">Environment variables</h2>
+    <table><thead><tr><th>Var</th><th>Purpose</th></tr></thead><tbody>
+      <tr><td><code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, …</td><td>real upstream keys (env source)</td></tr>
+      <tr><td><code>PROXYAGENT_ADMIN_TOKEN</code></td><td>fixed admin token (else auto-generated)</td></tr>
+      <tr><td><code>PROXYAGENT_SECRET_KEY</code></td><td>Fernet key → encrypt stored creds at rest</td></tr>
+      <tr><td><code>PROXYAGENT_DATABASE_URL</code></td><td>Postgres DSN (default: local SQLite)</td></tr>
+      <tr><td><code>PROXYAGENT_CACHE_TTL</code></td><td>response cache TTL seconds (0 = off)</td></tr>
+      <tr><td><code>PROXYAGENT_PROVIDER_BUDGETS</code> / <code>_RATE_LIMITS</code></td><td>per-provider $ ceiling / req-per-min</td></tr>
+      <tr><td><code>PROXYAGENT_MAX_BODY_BYTES</code></td><td>reject larger request bodies (413)</td></tr>
+      <tr><td><code>PROXYAGENT_CORS_ORIGINS</code></td><td>allow browser clients (CORS)</td></tr>
+      <tr><td><code>PROXYAGENT_BUDGET_WEBHOOK</code> / <code>_EVENT_WEBHOOK</code> / <code>_WEBHOOK_SECRET</code></td><td>alerts + lifecycle events (HMAC-signed)</td></tr>
+      <tr><td><code>PROXYAGENT_LOG_RETENTION_DAYS</code></td><td>auto-trim the audit log on boot</td></tr>
+    </tbody></table>
+    <p style="margin-top:40px;color:var(--dim);font-size:13px">proxyagent · Apache-2.0 · <a href="https://github.com/teddyoweh/proxyagent" target="_blank">github.com/teddyoweh/proxyagent</a></p>
+  </main>
+</div>
+<script>
+  // Substitute the live origin into every snippet so copy-paste just works.
+  const o=location.origin;
+  document.querySelectorAll("code,pre").forEach(el=>{el.innerHTML=el.innerHTML.split("__ORIGIN__").join(o)});
+  // Copy buttons on every code block.
+  document.querySelectorAll("pre").forEach(pre=>{
+    const b=document.createElement("button");b.className="cp";b.textContent="copy";
+    b.onclick=()=>{navigator.clipboard.writeText(pre.querySelector("code").innerText);b.textContent="copied";setTimeout(()=>b.textContent="copy",1200)};
+    pre.appendChild(b);
+  });
+</script>
+</body></html>

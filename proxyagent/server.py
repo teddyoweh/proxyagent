@@ -57,7 +57,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     config = config or Config.load()
     store = Store(config.db_path)
     tools = ToolRegistry(config)
-    app = FastAPI(title="proxyagent", version="0.1.0")
+    app = FastAPI(title="proxyagent", version="0.1.0", docs_url=None, redoc_url=None)
     app.state.store = store
     app.state.tools = tools
     started_at = time.time()
@@ -730,5 +730,11 @@ def create_app(config: Config | None = None) -> FastAPI:
     async def ui():
         idx = UI_DIR / "index.html"
         return HTMLResponse(idx.read_text() if idx.exists() else "<h1>proxyagent</h1>")
+
+    @app.get("/docs", response_class=HTMLResponse)
+    async def docs():
+        """Public, self-contained 'how to run it' documentation page."""
+        d = UI_DIR / "docs.html"
+        return HTMLResponse(d.read_text() if d.exists() else "<h1>proxyagent docs</h1>")
 
     return app

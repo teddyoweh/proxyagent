@@ -158,6 +158,17 @@ def test_ui_hide_class_wins():
     assert ".hide{display:none!important}" in html
 
 
+def test_docs_page():
+    c = _client()
+    r = c.get("/docs")
+    assert r.status_code == 200 and "text/html" in r.headers["content-type"]
+    body = r.text
+    assert "Run any agent on any machine" in body
+    assert "ANTHROPIC_BASE_URL" in body and "proxyagent serve" in body and "proxyagent token new" in body
+    # the dashboard links to it
+    assert "/docs" in c.get("/").text
+
+
 def test_healthz_and_ui():
     c = _client()
     assert c.get("/healthz").json()["ok"] is True

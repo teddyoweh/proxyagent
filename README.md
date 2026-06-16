@@ -66,9 +66,11 @@ export ANTHROPIC_API_KEY=pa_…          # the machine token, not the real key
 claude -p "ship it"
 ```
 
-## The dashboard
-`proxyagent serve` ships a dashboard at `/` (reveal the admin token with
-`proxyagent admin-token`):
+## The dashboard & docs
+`proxyagent serve` ships a dashboard at `/` and a full **"how to run it" docs page at `/docs`**
+(install → serve → add a key → mint a token → point any agent/SDK/curl at the proxy, with
+copy-paste snippets pre-filled with your host). Reveal the admin token with
+`proxyagent admin-token`. The dashboard:
 
 - **Access keys** — the credentials you create. Each is a provider + an auth type
   (Anthropic · API key, Anthropic · Bedrock, OpenAI · Azure, …); pick the type, enter the

@@ -64,6 +64,7 @@
   <input id="admintok" type="password" placeholder="pa_admin_…" onkeydown="if(event.key==='Enter')saveAdmin()"/>
   <button onclick="saveAdmin()">Open dashboard</button>
   <p id="gateerr" style="color:var(--red)"></p>
+  <p class="muted" style="font-size:13px">New here? <a href="/docs" style="color:var(--grn)">Read the docs — how to run it →</a></p>
 </div>
 
 <div id="app" class="hide">
@@ -78,6 +79,7 @@
     <div class="side-foot">
       <div><span id="badge_backend" class="badge"></span></div>
       <div id="enc"></div>
+      <a class="ghost sm" href="/docs" target="_blank" style="width:100%;display:block;text-align:center;text-decoration:none;border-radius:9px;padding:6px 0">📖 Docs · how to run</a>
       <button class="ghost sm" onclick="toggleTheme()" style="width:100%" id="themebtn">◑ Theme</button>
       <button class="ghost sm" onclick="logout()" style="width:100%">Sign out</button>
     </div>
