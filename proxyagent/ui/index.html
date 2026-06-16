@@ -89,7 +89,8 @@
     </div>
 
     <section id="t_keys">
-      <div class="h"><h2>Access keys</h2><button onclick="openCreate()">+ Create access key</button></div>
+      <div class="h"><h2>Access keys</h2><div class="row" style="gap:8px"><button class="ghost" onclick="testAll()">Test all</button><button onclick="openCreate()">+ Create access key</button></div></div>
+      <div id="testall_out" class="hide" style="margin-bottom:12px"></div>
       <div id="keylist"></div>
     </section>
 
@@ -207,6 +208,13 @@ async function submitCred(uid,provider){
 }
 async function disconnect(id){await api("/admin/providers/"+id,{method:"DELETE"});refreshKeys()}
 async function toggleKey(id){await api("/admin/providers/"+id+"/toggle",{method:"POST"});refreshKeys()}
+async function testAll(){const out=document.getElementById("testall_out");out.classList.remove("hide");out.innerHTML='<div class="card"><span class="muted" style="font-size:12px">Testing all credentials…</span></div>';
+  try{const r=await(await api("/admin/providers/test-all",{method:"POST"})).json();
+    if(!r.total){out.innerHTML='<div class="card"><span class="muted" style="font-size:12px">No stored credentials to test.</span></div>';return}
+    const rows=r.results.map(x=>{const cls=x.ok?"ok":(x.reachable?"warn":"no");const txt=x.ok?`ok ${x.latency_ms||0}ms`:(x.reachable?`${x.status}`:"unreachable");
+      return `<tr><td>${x.provider}</td><td><span class="badge on">${x.kind}</span></td><td>${x.label||'<span class="muted" style="font-size:11px">—</span>'}</td><td><span class="pill ${cls}">${txt}</span></td><td class="muted" style="font-size:12px">${(x.detail||"").slice(0,60)}</td></tr>`}).join("");
+    out.innerHTML=`<div class="card"><div style="margin-bottom:8px;font-size:13px"><b>${r.ok}/${r.total}</b> healthy</div><table><thead><tr><th>Provider</th><th>Auth</th><th>Name</th><th>Status</th><th>Detail</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }catch(e){out.innerHTML='<div class="card"><span class="pill no">error</span></div>'}}
 async function testKey(id){const el=document.getElementById("st_"+id);if(el)el.innerHTML='<span class="muted" style="font-size:11px">testing…</span>';
   try{const r=await(await api("/admin/providers/"+id+"/test",{method:"POST"})).json();
     const cls=r.ok?"ok":(r.reachable?"warn":"no");const txt=r.ok?`ok ${r.latency_ms}ms`:(r.reachable?`${r.status}`:"unreachable");

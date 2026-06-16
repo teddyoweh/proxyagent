@@ -143,6 +143,12 @@ def create_app(config: Config | None = None) -> FastAPI:
         # and stored on the call trace so a client log line ties to a proxy_agent_calls row.
         import uuid as _uuid
         rid = (request.headers.get("x-proxyagent-request-id") or "")[:128] or "req_" + _uuid.uuid4().hex[:16]
+        # Optional body-size guard — reject oversized payloads with 413 (0 = unlimited).
+        maxb = int(os.environ.get("PROXYAGENT_MAX_BODY_BYTES", "0") or 0)
+        if maxb:
+            cl = request.headers.get("content-length")
+            if cl and cl.isdigit() and int(cl) > maxb:
+                raise HTTPException(413, f"request body too large (> {maxb} bytes)")
         body = await request.json()
         # model remap — may rename the model and/or reroute to another provider
         provider, model = aliases.remap(provider, body.get("model", ""))
@@ -467,6 +473,27 @@ def create_app(config: Config | None = None) -> FastAPI:
         if not cred:
             raise HTTPException(404, "no such credential")
         return await test_credential(config, cred["provider"], cred)
+
+    @app.post("/admin/providers/test-all")
+    async def test_all_providers(authorization: str | None = Header(None),
+                                 x_admin_token: str | None = Header(None)):
+        """Ping every stored credential concurrently — a one-click health sweep."""
+        require_admin(authorization, x_admin_token)
+        import asyncio
+
+        async def _one(meta):
+            cred = store.get_credential_by_id(meta["id"])
+            try:
+                res = await test_credential(config, meta["provider"], cred)
+            except Exception as e:  # noqa: BLE001
+                res = {"ok": False, "reachable": False, "detail": str(e)[:200]}
+            return {"id": meta["id"], "provider": meta["provider"], "kind": meta["kind"],
+                    "label": meta.get("label"), "active": meta.get("active"), **res}
+
+        creds = store.list_credentials()
+        results = await asyncio.gather(*[_one(m) for m in creds]) if creds else []
+        return {"results": list(results), "ok": sum(1 for r in results if r.get("ok")),
+                "total": len(results)}
 
     @app.get("/admin/harnesses")
     async def harnesses(authorization: str | None = Header(None),

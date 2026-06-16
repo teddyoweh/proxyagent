@@ -646,6 +646,39 @@ def test_plan_for_credential_per_kind():
     assert u3 == "https://az/x" and h3["api-key"] == "k"
 
 
+def test_test_all_credentials(monkeypatch):
+    import proxyagent.server as srv
+
+    async def _fake(config, provider, cred, **kw):
+        # 'anthropic' reports healthy, everything else auth-failed
+        return ({"ok": True, "reachable": True, "status": 200, "latency_ms": 5, "detail": "authenticated"}
+                if provider == "anthropic"
+                else {"ok": False, "reachable": True, "status": 401, "detail": "bad credential"})
+
+    monkeypatch.setattr(srv, "test_credential", _fake)
+    c = _client()
+    c.post("/admin/providers", headers=ADMIN, json={"provider": "anthropic", "secret": "sk-a"})
+    c.post("/admin/providers", headers=ADMIN, json={"provider": "openai", "secret": "sk-b"})
+    r = c.post("/admin/providers/test-all", headers=ADMIN).json()
+    assert r["total"] == 2 and r["ok"] == 1
+    by_prov = {x["provider"]: x for x in r["results"]}
+    assert by_prov["anthropic"]["ok"] is True and by_prov["openai"]["ok"] is False
+    assert all("id" in x and "kind" in x for x in r["results"])
+    assert c.post("/admin/providers/test-all").status_code == 401
+
+
+def test_body_size_guard_413(monkeypatch):
+    monkeypatch.setenv("PROXYAGENT_MAX_BODY_BYTES", "200")
+    c = _client()
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    big = {"model": "mock", "max_tokens": 5, "messages": [{"role": "user", "content": "x" * 5000}]}
+    r = c.post("/anthropic/v1/messages", headers={"x-api-key": tok}, json=big)
+    assert r.status_code == 413 and "too large" in r.json()["detail"]
+    # a small request still works
+    small = {"model": "mock", "max_tokens": 5, "messages": [{"role": "user", "content": "hi"}]}
+    assert c.post("/anthropic/v1/messages", headers={"x-api-key": tok}, json=small).status_code == 200
+
+
 def test_credential_test_endpoint_404():
     c = _client()
     # unknown credential id → 404, no network

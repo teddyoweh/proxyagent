@@ -193,6 +193,9 @@ a **14-day requests chart**, and each token's **expiry countdown**.
 On a network fault the proxy fails over to the next credential in the pool; if they're all
 exhausted it returns a **clean `504`** (upstream timeout) or `502` (connection error) with a
 descriptive body — never a raw 500. Tune the upstream timeout with `PROXYAGENT_REQUEST_TIMEOUT`.
+Cap request size with `PROXYAGENT_MAX_BODY_BYTES` (over → `413`; 0 = unlimited). The dashboard's
+**Test all** button (and `Admin.test_all_credentials()`) health-sweeps every stored credential
+concurrently and reports ok / auth-failed / unreachable per credential.
 
 ## Security model
 - **Real keys never leave the proxy** — read from env, never persisted, never logged, never returned.

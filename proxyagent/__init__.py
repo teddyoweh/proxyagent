@@ -16,7 +16,7 @@ from typing import Optional
 
 from .harness import run  # noqa: F401  (the headline SDK call)
 
-__version__ = "0.30.0"
+__version__ = "0.31.0"
 __all__ = ["run", "serve", "create_app", "Config", "Admin", "__version__"]
 
 
@@ -111,5 +111,11 @@ class Admin:
     def test_credential(self, cred_id: str) -> dict:
         """Ping the upstream with a stored credential; reports ok / reachable / auth."""
         r = self._c.post(f"/admin/providers/{cred_id}/test")
+        r.raise_for_status()
+        return r.json()
+
+    def test_all_credentials(self) -> dict:
+        """Health-sweep every stored credential concurrently; {results, ok, total}."""
+        r = self._c.post("/admin/providers/test-all")
         r.raise_for_status()
         return r.json()
