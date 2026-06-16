@@ -117,17 +117,15 @@ export ANTHROPIC_API_KEY=pa_…        <span class="cm"># the machine token, NOT
 claude -p "ship it"
 <span class="cm"># Codex: export OPENAI_BASE_URL=__ORIGIN__/openai ; OPENAI_API_KEY=pa_…</span></code></pre>
 
-    <h2 id="sdk">SDK — use just a model, or manage the proxy</h2>
-    <p>If you only want model access (not a full agent), point any OpenAI/Anthropic client at the proxy:</p>
-    <pre><code>from openai import OpenAI
-client = OpenAI(base_url="__ORIGIN__/openai/v1", api_key="pa_…")   <span class="cm"># pa_ token, not a real key</span>
-client.chat.completions.create(model="gpt-4o", messages=[{"role":"user","content":"hi"}])
-
-<span class="cm"># host the proxy / manage it programmatically:</span>
-import proxyagent
-app   = proxyagent.create_app()                     <span class="cm"># ASGI app</span>
+    <h2 id="sdk">SDK — manage the proxy programmatically</h2>
+    <p>Mint tokens, manage credentials, and host the proxy from Python:</p>
+    <pre><code>import proxyagent
+app   = proxyagent.create_app()                     <span class="cm"># ASGI app — embed in your service</span>
 admin = proxyagent.Admin("__ORIGIN__", "pa_admin_…")
-tok   = admin.mint("ci", scope=["anthropic:claude-*"], ttl_seconds=3600)</code></pre>
+tok   = admin.mint("laptop", scope=["anthropic:claude-*"], ttl_seconds=3600)
+
+<span class="cm"># …then run an agent with that token (the headline call):</span>
+proxyagent.run("build the app", token=tok, proxy="__ORIGIN__")</code></pre>
 
     <h2 id="curl">Raw HTTP / curl</h2>
     <pre><code>curl __ORIGIN__/anthropic/v1/messages \

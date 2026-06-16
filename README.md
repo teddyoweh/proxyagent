@@ -239,14 +239,13 @@ proxyagent.run("build a SwiftUI todo app and run the tests",
 # harness="codex" for Codex, command="my-agent {goal}" for any custom agent.
 # token also reads PROXYAGENT_TOKEN; proxy reads PROXYAGENT_PROXY.
 ```
-Just want model access (not a full agent)? Point any OpenAI/Anthropic client at the proxy with
-the `pa_` token as the key. And you can host/manage the proxy programmatically:
+Manage the proxy programmatically too — mint tokens, manage credentials, host it:
 ```python
 import proxyagent
 app   = proxyagent.create_app()            # ASGI app — embed in your own service
 admin = proxyagent.Admin("https://proxy.you.com", "pa_admin_…")
-token = admin.mint("ci-runner", scope=["anthropic:claude-*"], ttl_seconds=3600)
-admin.usage_by_token(); admin.test_credential(cred_id); admin.export_logs()
+token = admin.mint("laptop", scope=["anthropic:claude-*"], ttl_seconds=3600)
+proxyagent.run("build the app", token=token, proxy="https://proxy.you.com")   # ← run an agent with it
 ```
 
 ## Harnesses & auth modes
