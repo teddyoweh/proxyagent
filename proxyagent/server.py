@@ -35,6 +35,12 @@ class TokenBody(BaseModel):
     budget_usd: float | None = None
 
 
+class TokenPatch(BaseModel):
+    scope: list[str] | None = None
+    rate_limit: int | None = None
+    budget_usd: float | None = None
+
+
 class ProviderBody(BaseModel):
     provider: str
     secret: str
@@ -295,6 +301,20 @@ def create_app(config: Config | None = None) -> FastAPI:
         if not store.revoke_token(tid):
             raise HTTPException(404, "no such token")
         return {"ok": True}
+
+    @app.patch("/admin/tokens/{tid}")
+    async def patch_token_ep(tid: str, body: TokenPatch, authorization: str | None = Header(None),
+                             x_admin_token: str | None = Header(None)):
+        """Retune a token's scope / rate limit / budget without re-minting it."""
+        require_admin(authorization, x_admin_token)
+        if not store.get_token(tid):
+            raise HTTPException(404, "no such token")
+        if not store.update_token(tid, scope=body.scope, rate_limit=body.rate_limit,
+                                  budget_usd=body.budget_usd):
+            raise HTTPException(400, "nothing to update")
+        t = store.get_token(tid)
+        return {"id": tid, "scope": _json.loads(t["scope_json"]),
+                "rate_limit": t["rate_limit"], "budget_usd": t.get("budget_usd")}
 
     @app.get("/admin/logs")
     async def logs_ep(limit: int = 200, authorization: str | None = Header(None),

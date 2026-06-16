@@ -90,6 +90,22 @@ class Store:
         cur = self.db.execute("UPDATE proxy_agent_tokens SET revoked=1 WHERE id=?", (tid,))
         return cur.rowcount > 0
 
+    def update_token(self, tid, *, scope=None, rate_limit=None, budget_usd=None):
+        """Retune a token in place — scope, rate limit, and/or budget — without re-minting.
+        Only the fields passed (not None) are changed."""
+        sets, args = [], []
+        if scope is not None:
+            sets.append("scope_json=?"); args.append(json.dumps(scope))
+        if rate_limit is not None:
+            sets.append("rate_limit=?"); args.append(rate_limit)
+        if budget_usd is not None:
+            sets.append("budget_usd=?"); args.append(budget_usd)
+        if not sets:
+            return False
+        args.append(tid)
+        cur = self.db.execute(f"UPDATE proxy_agent_tokens SET {','.join(sets)} WHERE id=?", tuple(args))
+        return cur.rowcount > 0
+
     def touch_token(self, tid):
         self.db.execute("UPDATE proxy_agent_tokens SET last_used_ms=? WHERE id=?", (now_ms(), tid))
 

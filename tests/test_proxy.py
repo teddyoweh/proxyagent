@@ -350,6 +350,27 @@ def test_credential_toggle_active():
     assert c.post("/admin/providers/key_nope/toggle", headers=ADMIN).status_code == 404
 
 
+def test_patch_token_retune():
+    c = _client()
+    mk = c.post("/admin/tokens", headers=ADMIN,
+                json={"scope": ["anthropic:*"], "rate_limit": 0}).json()
+    tok, tid = mk["token"], mk["id"]
+    # initially scoped to anthropic only → openai is forbidden
+    assert c.post("/openai/v1/chat/completions", headers={"x-api-key": tok},
+                  json={"model": "mock", "messages": []}).status_code == 403
+    # widen the scope + set a budget via PATCH (no re-mint)
+    r = c.patch("/admin/tokens/" + tid, headers=ADMIN,
+                json={"scope": ["*"], "rate_limit": 5, "budget_usd": 2.5})
+    assert r.status_code == 200 and r.json()["scope"] == ["*"] and r.json()["rate_limit"] == 5
+    # now openai works
+    assert c.post("/openai/v1/chat/completions", headers={"x-api-key": tok},
+                  json={"model": "mock", "messages": [{"role": "user", "content": "hi"}]}).status_code == 200
+    listed = {t["id"]: t for t in c.get("/admin/tokens", headers=ADMIN).json()["tokens"]}
+    assert listed[tid]["budget_usd"] == 2.5 and listed[tid]["scope"] == ["*"]
+    assert c.patch("/admin/tokens/key_nope", headers=ADMIN, json={"scope": ["*"]}).status_code == 404
+    assert c.patch("/admin/tokens/" + tid, json={"scope": ["*"]}).status_code == 401
+
+
 def test_models_listing_endpoint():
     c = _client()
     tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]

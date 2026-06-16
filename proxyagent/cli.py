@@ -339,6 +339,25 @@ def usage(proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
 
 
 @app.command()
+def models(provider: Optional[str] = typer.Argument(None, help="Limit to one provider."),
+           token: Optional[str] = typer.Option(None, "--token", help="Machine token (or PROXYAGENT_TOKEN)."),
+           proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy")):
+    """List the models the proxy can route (uses a machine token, not admin)."""
+    tok = token or os.environ.get("PROXYAGENT_TOKEN")
+    if not tok:
+        err.print("[red]Need a machine token[/red] (--token or PROXYAGENT_TOKEN)."); raise typer.Exit(1)
+    path = f"/{provider}/v1/models" if provider else "/v1/models"
+    r = httpx.get(proxy.rstrip("/") + path, headers={"x-api-key": tok}, timeout=15)
+    if r.status_code >= 400:
+        err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
+    t = Table(title="Models")
+    t.add_column("ID"); t.add_column("Owned by")
+    for m in r.json()["data"]:
+        t.add_row(m["id"], m.get("owned_by", ""))
+    console.print(t)
+
+
+@app.command()
 def stats(proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
           admin: str = typer.Option(None, "--admin")):
     """Operational snapshot: version, uptime, cache, tokens, spend."""
