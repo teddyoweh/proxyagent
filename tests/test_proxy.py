@@ -422,6 +422,39 @@ def test_request_id_echo_and_logged():
     assert "request_id" in csv.splitlines()[0] and "trace-abc-123" in csv
 
 
+def test_budget_webhook_fires(monkeypatch):
+    """When a token crosses its budget, the proxy POSTs an alert to the configured webhook
+    (deduped) before returning 402."""
+    import proxyagent.server as srv
+    sent = []
+
+    class _Resp:  # minimal stand-in
+        status_code = 200
+
+    def _fake_post(url, **kw):
+        sent.append({"url": url, "json": kw.get("json")})
+        return _Resp()
+
+    monkeypatch.setattr(srv.httpx, "post", _fake_post)
+    monkeypatch.setenv("PROXYAGENT_BUDGET_WEBHOOK", "https://hook.test/alert")
+    c = _client()
+    mk = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"], "budget_usd": 0.001})
+    tok, tid = mk.json()["token"], mk.json()["id"]
+    # seed spend over the cap, then a call trips the budget + the webhook
+    c.app.state.store.log_request(token_id=tid, provider="anthropic", model="x", status=200, cost_usd=0.01)
+    r = c.post("/anthropic/v1/messages", headers={"x-api-key": tok},
+               json={"model": "mock", "max_tokens": 5, "messages": [{"role": "user", "content": "hi"}]})
+    assert r.status_code == 402
+    assert len(sent) == 1
+    body = sent[0]["json"]
+    assert body["event"] == "budget_exhausted" and body["type"] == "token" and body["id"] == tid
+    assert body["cap_usd"] == 0.001 and body["spend_usd"] >= 0.001
+    # second blocked call within cooldown does NOT re-fire
+    c.post("/anthropic/v1/messages", headers={"x-api-key": tok},
+           json={"model": "mock", "max_tokens": 5, "messages": [{"role": "user", "content": "hi"}]})
+    assert len(sent) == 1
+
+
 def test_provider_budget_402(monkeypatch):
     """A provider-wide cost ceiling returns 402 once the provider's total spend crosses it,
     regardless of which token calls."""

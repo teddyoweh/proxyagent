@@ -11,6 +11,7 @@ import os
 import time
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
@@ -63,6 +64,29 @@ def create_app(config: Config | None = None) -> FastAPI:
             pass
 
     # ------------------------------------------------------------------ #
+    # Budget alerting — POST a webhook when a token/provider crosses its cap.
+    # Deduped per (kind,id) with a cooldown so a blocked-but-retrying client
+    # doesn't spam the hook.
+    # ------------------------------------------------------------------ #
+    alerted: dict = {}
+
+    def _budget_alert(kind: str, name: str, cap: float, spend: float) -> None:
+        url = os.environ.get("PROXYAGENT_BUDGET_WEBHOOK")
+        if not url:
+            return
+        cooldown = int(os.environ.get("PROXYAGENT_BUDGET_WEBHOOK_COOLDOWN", "300") or 300)
+        key = (kind, name)
+        nowt = time.time()
+        if nowt - alerted.get(key, 0) < cooldown:
+            return
+        alerted[key] = nowt
+        try:
+            httpx.post(url, json={"event": "budget_exhausted", "type": kind, "id": name,
+                                  "cap_usd": cap, "spend_usd": round(spend, 6)}, timeout=5)
+        except Exception:  # noqa: BLE001 — alerting is best-effort, never block the request
+            pass
+
+    # ------------------------------------------------------------------ #
     # Auth helpers
     # ------------------------------------------------------------------ #
     def _bearer(authorization: str | None, x_api_key: str | None) -> str | None:
@@ -83,8 +107,11 @@ def create_app(config: Config | None = None) -> FastAPI:
         if row["rate_limit"] and store.recent_request_count(row["id"]) >= row["rate_limit"]:
             raise HTTPException(429, "rate limit exceeded")
         budget = row.get("budget_usd")
-        if budget is not None and store.token_spend(row["id"]) >= budget:
-            raise HTTPException(402, f"token budget of ${budget:.4f} exhausted")
+        if budget is not None:
+            spend = store.token_spend(row["id"])
+            if spend >= budget:
+                _budget_alert("token", row["id"], budget, spend)
+                raise HTTPException(402, f"token budget of ${budget:.4f} exhausted")
         store.touch_token(row["id"])
         return row
 
@@ -125,8 +152,11 @@ def create_app(config: Config | None = None) -> FastAPI:
             raise HTTPException(429, f"rate limit for provider '{provider}' exceeded ({rl}/min)")
 
         pb = provider_budget(provider)
-        if pb and store.provider_spend(provider) >= pb:
-            raise HTTPException(402, f"provider '{provider}' budget of ${pb:g} exhausted")
+        if pb:
+            pspend = store.provider_spend(provider)
+            if pspend >= pb:
+                _budget_alert("provider", provider, pb, pspend)
+                raise HTTPException(402, f"provider '{provider}' budget of ${pb:g} exhausted")
 
         tools_on = request.headers.get("x-proxyagent-tools", "").lower() in ("1", "on", "true")
         used_tools: list[str] = []

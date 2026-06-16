@@ -260,6 +260,12 @@ blow your bill no matter which token it holds:
 ```bash
 export PROXYAGENT_PROVIDER_BUDGETS='{"anthropic": 200, "openai": 50}'   # $ ceilings; over → 402
 ```
+Get **alerted** when any cap is crossed — the proxy POSTs a webhook (deduped per token/provider
+with a cooldown) right before the 402:
+```bash
+export PROXYAGENT_BUDGET_WEBHOOK=https://hooks.slack.com/…   # {event,type,id,cap_usd,spend_usd}
+export PROXYAGENT_BUDGET_WEBHOOK_COOLDOWN=300                # seconds between repeat alerts (default 300)
+```
 
 ## Supported providers
 `anthropic` · `openai` · `gemini` · `groq` · `openrouter` · `mistral` · `deepseek` ·

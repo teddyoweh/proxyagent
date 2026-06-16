@@ -338,6 +338,28 @@ def usage(proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
         title="usage", border_style="green"))
 
 
+@app.command()
+def stats(proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
+          admin: str = typer.Option(None, "--admin")):
+    """Operational snapshot: version, uptime, cache, tokens, spend."""
+    with _admin_client(proxy, admin) as c:
+        r = c.get("/admin/stats")
+    if r.status_code >= 400:
+        err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
+    d = r.json()
+    cache = (f"{d['cache']['hits']} hits · {d['cache']['size']} entries · {d['cache']['ttl_s']}s"
+             if d["cache"]["enabled"] else "off")
+    up = d["uptime_s"]
+    up_h = f"{up // 3600}h{(up % 3600) // 60}m" if up >= 3600 else f"{up // 60}m{up % 60}s" if up >= 60 else f"{up}s"
+    console.print(Panel.fit(
+        f"[bold]proxyagent v{d['version']}[/bold]   [dim]up {up_h} · {d['backend']}"
+        f"{' 🔒' if d.get('encryption') else ''}[/dim]\n\n"
+        f"[bold]{d['requests']}[/bold] requests   [green]${d.get('cost_usd', 0):.4f}[/green] spend   "
+        f"[bold]{d['tokens']['active']}[/bold]/{d['tokens']['total']} tokens · "
+        f"{d['credentials']} creds\n[dim]cache: {cache} · providers: {', '.join(d['providers']) or 'none'}[/dim]",
+        title="stats", border_style="green"))
+
+
 @app.command("usage-by-token")
 def usage_by_token(proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
                    admin: str = typer.Option(None, "--admin")):
