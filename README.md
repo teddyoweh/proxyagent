@@ -120,8 +120,11 @@ Every call is traced in `proxy_agent_calls` with **token usage, latency, and com
 cost** (per-model pricing, override via `PROXYAGENT_PRICING`). See it live:
 
 ```bash
-proxyagent usage          # totals: requests · tokens · $ cost
-proxyagent logs           # per-request trace incl. cost
+proxyagent usage              # totals: requests · tokens · $ cost
+proxyagent logs               # per-request trace incl. cost
+proxyagent usage-by-token     # per-token spend breakdown (who's costing what)
+proxyagent logs-export -o audit.csv    # dump the audit trail to CSV
+proxyagent logs-trim 30       # delete traces older than 30 days
 ```
 
 **Per-token spend & audit retention.** See exactly which machine token is costing what
@@ -142,7 +145,9 @@ docker compose --profile postgres up -d
 ```
 A `Dockerfile` (with a `/healthz` HEALTHCHECK) and `docker-compose.yml` (proxy + optional Postgres,
 persistent volume) ship in the repo. Bring keys via a `.env` file. Verified: container builds,
-`/healthz` green, mock call + dashboard serve.
+`/healthz` green, mock call + dashboard serve. `GET /readyz` is a **readiness** probe that pings the
+backing store and returns **503** if the DB is unreachable — wire it to your load balancer / k8s
+readiness check so a broken instance is pulled from rotation.
 
 ## Rate limits
 Per-token limits (mint with `--rate`) and **per-provider** limits protect your upstreams:

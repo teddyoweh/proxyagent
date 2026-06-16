@@ -231,5 +231,10 @@ class Store:
         return {"total": total, "by_provider": by_provider, "by_status": by_status,
                 "active_tokens": active_tokens, "credentials": credentials}
 
+    def ping(self) -> bool:
+        """Cheap round-trip to confirm the backing store is reachable (readiness probe)."""
+        self.db.fetchone("SELECT 1 AS ok")
+        return True
+
     def close(self):
         self.db.close()

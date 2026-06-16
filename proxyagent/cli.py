@@ -321,5 +321,57 @@ def usage(proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
         title="usage", border_style="green"))
 
 
+@app.command("usage-by-token")
+def usage_by_token(proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
+                   admin: str = typer.Option(None, "--admin")):
+    """Per-token spend breakdown — which machine token is costing what."""
+    with _admin_client(proxy, admin) as c:
+        r = c.get("/admin/usage-by-token")
+    if r.status_code >= 400:
+        err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
+    rows = [t for t in r.json()["tokens"] if t["requests"]]
+    if not rows:
+        console.print("[dim]No spend yet.[/dim]"); return
+    t = Table(title="Spend by token")
+    for col in ("Token", "Key", "Requests", "In", "Out", "Cost", "Budget"):
+        t.add_column(col)
+    for k in rows:
+        bud = (f"${k['cost_usd']:.4f} / ${float(k['budget_usd']):.2f}"
+               + (f" ({k['budget_pct']}%)" if k.get("budget_pct") is not None else "")) if k.get("budget_usd") else "—"
+        t.add_row(k.get("label") or "", k.get("masked") or "", str(k["requests"]),
+                  str(k["prompt_tokens"]), str(k["completion_tokens"]), f"${k['cost_usd']:.4f}", bud)
+    console.print(t)
+
+
+@app.command("logs-export")
+def logs_export(out: str = typer.Option(None, "--out", "-o", help="Write CSV here (default: stdout)."),
+                limit: int = typer.Option(100_000, "--limit"),
+                proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
+                admin: str = typer.Option(None, "--admin")):
+    """Export the audit trail (proxy_agent_calls) as CSV — for SIEM / archival."""
+    with _admin_client(proxy, admin) as c:
+        r = c.get("/admin/logs/export", params={"limit": limit})
+    if r.status_code >= 400:
+        err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
+    if out:
+        with open(out, "w") as f:
+            f.write(r.text)
+        console.print(f"[green]✓[/green] wrote {out} ({len(r.text.splitlines()) - 1} rows)")
+    else:
+        print(r.text)
+
+
+@app.command("logs-trim")
+def logs_trim(days: int = typer.Argument(30, help="Delete call traces older than this many days."),
+              proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
+              admin: str = typer.Option(None, "--admin")):
+    """Trim the audit log — delete traces older than DAYS."""
+    with _admin_client(proxy, admin) as c:
+        r = c.post("/admin/logs/trim", params={"days": days})
+    if r.status_code >= 400:
+        err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
+    console.print(f"[green]✓[/green] trimmed {r.json()['deleted']} trace(s) older than {days}d")
+
+
 if __name__ == "__main__":
     app()

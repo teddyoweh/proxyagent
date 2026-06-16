@@ -330,6 +330,23 @@ def test_oauth_refresh_helpers():
     assert c["secret"] == "new-tok" and (c["meta"] or {}).get("expires_ms") == 999999999999
 
 
+def test_readyz_and_ping():
+    c = _client()
+    r = c.get("/readyz")
+    assert r.status_code == 200 and r.json()["ready"] is True and r.json()["backend"] == "sqlite"
+    assert Store(":memory:").ping() is True
+    # broken store → 503 (monkeypatch the store the route closes over)
+    c.app.state.store.ping = lambda: (_ for _ in ()).throw(RuntimeError("db gone"))
+    rr = c.get("/readyz")
+    assert rr.status_code == 503 and rr.json()["ready"] is False and "db gone" in rr.json()["error"]
+
+
+def test_py_typed_marker_packaged():
+    import proxyagent
+    import os.path as _p
+    assert _p.exists(_p.join(_p.dirname(proxyagent.__file__), "py.typed"))
+
+
 def test_server_side_tool_loop(monkeypatch):
     """Full agentic loop offline: mock asks to call a tool → proxy executes it server-side
     → appends tool_result → re-calls → mock returns a final answer citing the tool output."""

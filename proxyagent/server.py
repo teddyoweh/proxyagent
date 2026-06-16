@@ -393,6 +393,17 @@ def create_app(config: Config | None = None) -> FastAPI:
                 "tools": tools.names(), "backend": store.backend,
                 "aliases": len(aliases.get_map())}
 
+    @app.get("/readyz")
+    async def readyz():
+        """Readiness probe — pings the backing store. 503 if the DB is unreachable, so a
+        load balancer / k8s readiness check can pull a broken instance out of rotation."""
+        try:
+            store.ping()
+        except Exception as e:  # noqa: BLE001
+            return JSONResponse({"ready": False, "backend": store.backend, "error": str(e)[:200]},
+                                status_code=503)
+        return {"ready": True, "backend": store.backend}
+
     @app.get("/metrics", response_class=PlainTextResponse)
     async def metrics(authorization: str | None = Header(None),
                       x_admin_token: str | None = Header(None)):
