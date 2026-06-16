@@ -390,6 +390,35 @@ def models(provider: Optional[str] = typer.Argument(None, help="Limit to one pro
 
 
 @app.command()
+def doctor():
+    """Diagnose the local setup — providers, encryption, database, admin token."""
+    from . import crypto
+    from .config import Config
+    from .store import Store
+    cfg = Config.load()
+    checks = []
+    provs = cfg.configured_providers()
+    checks.append(("Providers configured", ", ".join(provs) or "none — set *_API_KEY or `provider add`", bool(provs)))
+    enc = crypto.encryption_available()
+    checks.append(("At-rest encryption", "on" if enc else "off — set PROXYAGENT_SECRET_KEY", enc))
+    try:
+        s = Store(cfg.db_path)
+        s.ping()
+        checks.append(("Database", s.backend + " · reachable", True))
+    except Exception as e:  # noqa: BLE001
+        checks.append(("Database", str(e)[:50], False))
+    has_admin = bool(cfg.admin_token_plain or os.environ.get("PROXYAGENT_ADMIN_TOKEN"))
+    checks.append(("Admin token", "set" if has_admin else "auto-generated on `serve`", True))
+    t = Table(title="proxyagent doctor")
+    t.add_column(""); t.add_column("Check"); t.add_column("Detail")
+    for name, detail, ok in checks:
+        t.add_row("[green]✓[/green]" if ok else "[yellow]●[/yellow]", name, detail)
+    console.print(t)
+    if not provs:
+        console.print("[dim]Tip: `proxyagent provider add anthropic --key sk-ant-…` or run fully offline with `alias set '*' mock`.[/dim]")
+
+
+@app.command()
 def stats(proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
           admin: str = typer.Option(None, "--admin")):
     """Operational snapshot: version, uptime, cache, tokens, spend."""

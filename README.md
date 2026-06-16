@@ -128,6 +128,7 @@ Every call is traced in `proxy_agent_calls` with **token usage, latency, and com
 cost** (per-model pricing, override via `PROXYAGENT_PRICING`). See it live:
 
 ```bash
+proxyagent doctor             # diagnose setup: providers · encryption · db · admin token
 proxyagent usage              # totals: requests · tokens · $ cost
 proxyagent logs               # per-request trace incl. cost
 proxyagent usage-by-token     # per-token spend breakdown (who's costing what)

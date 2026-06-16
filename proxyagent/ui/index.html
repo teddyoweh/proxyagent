@@ -311,7 +311,8 @@ function stat(label,val){return `<div><div class="muted" style="font-size:11px;t
 async function refreshStats(){const s=await(await api("/admin/stats")).json();
   const cache=s.cache.enabled?`${s.cache.hits} hits · ${s.cache.size} entries · ${s.cache.ttl_s}s`:"off";
   const lat=s.latency_ms&&s.latency_ms.p50!=null?`${s.latency_ms.p50}/${s.latency_ms.p95}ms`:"—";
-  document.getElementById("statstrip").innerHTML=stat("Version","v"+s.version)+stat("Uptime",upt(s.uptime_s))+stat("Requests",s.requests)+stat("Spend","$"+(s.cost_usd||0).toFixed(4))+stat("Latency p50/p95",lat)+stat("Cache",cache)+stat("Tokens",s.tokens.active+" active")+stat("Credentials",s.credentials)+stat("Backend",s.backend+(s.encryption?" 🔒":""));refreshChart()}
+  const bs=s.by_status&&Object.keys(s.by_status).length?Object.entries(s.by_status).sort().map(([k,v])=>`${k}×${v}`).join("  "):"—";
+  document.getElementById("statstrip").innerHTML=stat("Version","v"+s.version)+stat("Uptime",upt(s.uptime_s))+stat("Requests",s.requests)+stat("Spend","$"+(s.cost_usd||0).toFixed(4))+stat("Latency p50/p95",lat)+stat("Statuses",bs)+stat("Cache",cache)+stat("Tokens",s.tokens.active+" active")+stat("Credentials",s.credentials)+stat("Backend",s.backend+(s.encryption?" 🔒":""));refreshChart()}
 let chartMetric="requests";
 function setChartMetric(m){chartMetric=m;refreshChart()}
 async function refreshChart(){const el=document.getElementById("daychart");if(!el)return;

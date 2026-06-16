@@ -494,6 +494,16 @@ def test_healthz_version_uptime():
     assert isinstance(h["uptime_s"], int) and h["uptime_s"] >= 0
 
 
+def test_stats_by_status_breakdown():
+    c = _client()
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    for _ in range(3):
+        c.post("/anthropic/v1/messages", headers={"x-api-key": tok},
+               json={"model": "mock", "max_tokens": 5, "messages": [{"role": "user", "content": "hi"}]})
+    by_status = c.get("/admin/stats", headers=ADMIN).json()["by_status"]
+    assert by_status.get("200") == 3
+
+
 def test_usage_by_model_breakdown():
     c = _client()
     tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
