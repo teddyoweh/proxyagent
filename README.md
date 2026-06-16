@@ -172,7 +172,9 @@ requests are served from memory — saving upstream cost + latency. Cache hits r
 in `/metrics`.
 
 ## Request tracing
-Every proxied response carries `x-proxyagent-request-id`. Send your own
+W3C trace context (`traceparent` / `tracestate` / `baggage`) sent by the client is **forwarded
+to the upstream**, so a distributed trace spans the proxy hop. Every proxied response also carries
+`x-proxyagent-request-id`. Send your own
 (`x-proxyagent-request-id: <id>`) and the proxy honours + echoes it; omit it and the proxy mints
 one (`req_…`). The id is stored on the call trace (`proxy_agent_calls.request_id`, in `logs` and
 the CSV export), so a client log line ties straight to a row in the audit trail.

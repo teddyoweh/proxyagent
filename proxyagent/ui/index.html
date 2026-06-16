@@ -32,7 +32,7 @@
   input,select,textarea{font:inherit;border-radius:11px;border:none;background:var(--panel2);color:var(--txt);padding:10px 12px;outline:none;box-shadow:inset 0 0 0 1px transparent;width:100%}
   input:focus,select:focus,textarea:focus{box-shadow:inset 0 0 0 1px rgba(52,211,158,.45)}input::placeholder,textarea::placeholder{color:#5a606b}
   button{font:inherit;background:var(--grn);color:#04130d;border:none;border-radius:11px;padding:10px 15px;font-weight:660;cursor:pointer;width:auto}button:hover{filter:brightness(1.07)}
-  button.ghost{background:var(--soft);color:var(--dim)}button.ghost:hover{color:var(--txt)}
+  button.ghost{background:var(--soft);color:var(--dim)}button.ghost:hover{color:var(--txt)}button.ghost.on{color:var(--txt);box-shadow:inset 0 0 0 1px var(--grn)}
   button.danger{background:rgba(246,120,138,.12);color:var(--red)}button.danger:hover{background:rgba(246,120,138,.2)}
   button.sm{padding:7px 12px;font-size:12.5px;border-radius:9px}
   .row{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
@@ -136,7 +136,7 @@
     <section id="t_activity" class="hide">
       <div class="h"><h2>Activity</h2><div class="row" style="gap:8px"><button class="ghost sm" onclick="exportLogs()">Export CSV</button><button class="ghost sm" onclick="trimLogs()">Trim &gt;30d</button></div></div>
       <div class="card" id="statstrip" style="margin-bottom:16px;display:flex;gap:28px;flex-wrap:wrap;font-size:13px"></div>
-      <div class="label" style="margin-bottom:8px">Requests · last 14 days</div>
+      <div class="h" style="margin-bottom:8px"><div class="label" style="margin:0">Last 14 days</div><div class="row" style="gap:6px"><button class="ghost sm" id="chart_reqs" onclick="setChartMetric('requests')">Requests</button><button class="ghost sm" id="chart_cost" onclick="setChartMetric('cost_usd')">Cost</button></div></div>
       <div class="card" style="margin-bottom:16px"><div id="daychart" style="display:flex;align-items:flex-end;gap:6px;height:90px"></div></div>
       <div class="row" style="gap:16px;align-items:flex-start">
         <div style="flex:1;min-width:0">
@@ -312,11 +312,16 @@ async function refreshStats(){const s=await(await api("/admin/stats")).json();
   const cache=s.cache.enabled?`${s.cache.hits} hits · ${s.cache.size} entries · ${s.cache.ttl_s}s`:"off";
   const lat=s.latency_ms&&s.latency_ms.p50!=null?`${s.latency_ms.p50}/${s.latency_ms.p95}ms`:"—";
   document.getElementById("statstrip").innerHTML=stat("Version","v"+s.version)+stat("Uptime",upt(s.uptime_s))+stat("Requests",s.requests)+stat("Spend","$"+(s.cost_usd||0).toFixed(4))+stat("Latency p50/p95",lat)+stat("Cache",cache)+stat("Tokens",s.tokens.active+" active")+stat("Credentials",s.credentials)+stat("Backend",s.backend+(s.encryption?" 🔒":""));refreshChart()}
+let chartMetric="requests";
+function setChartMetric(m){chartMetric=m;refreshChart()}
 async function refreshChart(){const el=document.getElementById("daychart");if(!el)return;
+  document.getElementById("chart_reqs").classList.toggle("on",chartMetric==="requests");
+  document.getElementById("chart_cost").classList.toggle("on",chartMetric==="cost_usd");
   const d=(await(await api("/admin/usage-by-day?days=14")).json()).days;
   if(!d.length){el.innerHTML='<span class="muted" style="font-size:12px">No activity yet.</span>';return}
-  const max=Math.max(...d.map(x=>x.requests),1);
-  el.innerHTML=d.map(x=>`<div title="${x.date}: ${x.requests} reqs · $${x.cost_usd.toFixed(4)}" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px"><div style="width:60%;min-height:2px;height:${Math.round(x.requests/max*70)}px;background:var(--grn);border-radius:3px 3px 0 0"></div><div class="muted" style="font-size:9px">${x.date.slice(5)}</div></div>`).join("")}
+  const m=chartMetric,max=Math.max(...d.map(x=>x[m]),m==="cost_usd"?0.0001:1);
+  el.innerHTML=d.map(x=>{const v=x[m],lbl=m==="cost_usd"?"$"+x.cost_usd.toFixed(4):x.requests+" reqs";
+    return `<div title="${x.date}: ${lbl}" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px"><div style="width:60%;min-height:2px;height:${Math.round(v/max*70)}px;background:var(--grn);border-radius:3px 3px 0 0"></div><div class="muted" style="font-size:9px">${x.date.slice(5)}</div></div>`}).join("")}
 async function exportLogs(){const r=await api("/admin/logs/export");const blob=await r.blob();const u=URL.createObjectURL(blob);const a=document.createElement("a");a.href=u;a.download="proxyagent-audit.csv";a.click();URL.revokeObjectURL(u)}
 async function trimLogs(){if(!confirm("Delete call traces older than 30 days?"))return;const d=await(await api("/admin/logs/trim?days=30",{method:"POST"})).json();alert(`Trimmed ${d.deleted} trace(s).`);refreshLogs()}
 

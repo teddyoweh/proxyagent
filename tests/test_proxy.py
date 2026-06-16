@@ -526,6 +526,38 @@ def test_request_id_echo_and_logged():
     assert "request_id" in csv.splitlines()[0] and "trace-abc-123" in csv
 
 
+def test_traceparent_passthrough(monkeypatch):
+    """W3C trace headers from the client are forwarded onto the upstream request."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    import proxyagent.providers as P
+    seen = {}
+
+    class _Resp:
+        status_code = 200
+        is_success = True
+        text = "{}"
+        def json(self): return {"id": "x", "usage": {"input_tokens": 1, "output_tokens": 1}}
+
+    class _CaptureClient:
+        def __init__(self, *a, **k): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def post(self, url, *, headers, content):
+            seen.update(headers)
+            return _Resp()
+
+    monkeypatch.setattr(P.httpx, "AsyncClient", _CaptureClient)
+    c = _client()
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    tp = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+    r = c.post("/anthropic/v1/messages",
+               headers={"x-api-key": tok, "traceparent": tp, "tracestate": "vendor=1"},
+               json={"model": "claude-3-5-haiku", "max_tokens": 5,
+                     "messages": [{"role": "user", "content": "hi"}]})
+    assert r.status_code == 200
+    assert seen.get("traceparent") == tp and seen.get("tracestate") == "vendor=1"
+
+
 def test_upstream_timeout_returns_504(monkeypatch):
     """A real upstream timeout surfaces as a clean 504 (not a raw 500)."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")   # gives build_plans a real plan

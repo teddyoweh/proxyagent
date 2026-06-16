@@ -163,6 +163,9 @@ def create_app(config: Config | None = None) -> FastAPI:
             cl = request.headers.get("content-length")
             if cl and cl.isdigit() and int(cl) > maxb:
                 raise HTTPException(413, f"request body too large (> {maxb} bytes)")
+        # Distributed-tracing passthrough — forward W3C trace context to the upstream.
+        px = {h: request.headers[h] for h in ("traceparent", "tracestate", "baggage")
+              if h in request.headers}
         body = await request.json()
         # model remap — may rename the model and/or reroute to another provider
         provider, model = aliases.remap(provider, body.get("model", ""))
@@ -206,7 +209,7 @@ def create_app(config: Config | None = None) -> FastAPI:
                     pass
             status, payload, steps = await forward_agentic(
                 config, provider, body, token=token, store=store, tools=tools,
-                max_steps=max_steps, request_id=rid)
+                max_steps=max_steps, request_id=rid, passthrough_headers=px)
             return JSONResponse(payload, status_code=status,
                                 headers={"x-proxyagent-tool-steps": str(steps),
                                          "x-proxyagent-tool-steps-max": str(max_steps),
@@ -226,7 +229,7 @@ def create_app(config: Config | None = None) -> FastAPI:
 
         status, headers, payload, _ = await forward(
             config, provider, body, streaming=streaming, token=token, store=store,
-            tools_used=used_tools, request_id=rid)
+            tools_used=used_tools, request_id=rid, passthrough_headers=px)
         if streaming:
             return StreamingResponse(payload, media_type="text/event-stream",
                                      headers={"x-proxyagent-request-id": rid})

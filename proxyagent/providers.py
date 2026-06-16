@@ -123,12 +123,15 @@ def _extract_usage(provider: str, payload: dict) -> tuple[int | None, int | None
 async def forward(
     config: Config, provider_name: str, body: dict,
     *, streaming: bool, token: dict, store: Store, tools_used: list[str] | None = None,
-    request_id: str | None = None,
+    request_id: str | None = None, passthrough_headers: dict | None = None,
 ):
-    """Forward a request upstream. Returns (status, headers, body_iter_or_dict, log_after)."""
+    """Forward a request upstream. Returns (status, headers, body_iter_or_dict, log_after).
+    passthrough_headers (e.g. W3C traceparent/tracestate) are merged onto every upstream
+    request so distributed traces span the proxy."""
     provider = PROVIDERS[provider_name]
     model = body.get("model", "")
     t0 = now_ms()
+    px = passthrough_headers or {}
 
     # Offline mock — exercise the full pipeline (auth, scope, log, cost) with NO real
     # key. Use model "mock" (or "mock-…") anywhere a real model would go.
@@ -165,7 +168,7 @@ async def forward(
             try:
                 async with httpx.AsyncClient(timeout=config.request_timeout) as client:
                     for i, (url, headers, raw) in enumerate(plans):
-                        async with client.stream("POST", url, headers=headers, content=raw) as resp:
+                        async with client.stream("POST", url, headers={**headers, **px}, content=raw) as resp:
                             status = resp.status_code
                             if status in FAILOVER_STATUS and i < len(plans) - 1:
                                 await resp.aread()  # drain + rotate to the next credential
@@ -195,7 +198,7 @@ async def forward(
             # Network faults (timeout / connect error) are retryable: rotate to the next
             # credential, and if none is left return a clean 504/502 instead of a raw 500.
             try:
-                resp = await client.post(url, headers=headers, content=raw)
+                resp = await client.post(url, headers={**headers, **px}, content=raw)
             except httpx.TimeoutException:
                 last_status = 504
                 last_payload = {"error": f"upstream timeout for provider '{provider_name}' "
@@ -259,7 +262,8 @@ def _append_tool_turn(shape: str, body: dict, payload: dict, results: list[tuple
 
 
 async def forward_agentic(config: Config, provider_name: str, body: dict, *, token: dict,
-                          store: Store, tools, max_steps: int = 6, request_id: str | None = None):
+                          store: Store, tools, max_steps: int = 6, request_id: str | None = None,
+                          passthrough_headers: dict | None = None):
     """Non-streaming agentic loop: forward, and while the model asks to use a tool the proxy
     MANAGES, execute it server-side, append the result, and re-call — until a final answer or
     max_steps. The machine never holds the tool's credentials. Returns (status, payload, steps)."""
@@ -268,7 +272,7 @@ async def forward_agentic(config: Config, provider_name: str, body: dict, *, tok
     while True:
         status, _h, payload, _ = await forward(config, provider_name, body, streaming=False,
                                                token=token, store=store, tools_used=tools.names(),
-                                               request_id=request_id)
+                                               request_id=request_id, passthrough_headers=passthrough_headers)
         if status != 200 or not isinstance(payload, dict):
             return status, payload, steps
         calls = _extract_tool_calls(shape, payload)
