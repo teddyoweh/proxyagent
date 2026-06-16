@@ -350,6 +350,22 @@ def test_credential_toggle_active():
     assert c.post("/admin/providers/key_nope/toggle", headers=ADMIN).status_code == 404
 
 
+def test_models_listing_endpoint():
+    c = _client()
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    # needs a machine token
+    assert c.get("/v1/models").status_code == 401
+    allm = c.get("/v1/models", headers={"x-api-key": tok}).json()
+    assert allm["object"] == "list" and any(m["id"] == "mock" for m in allm["data"])
+    ids = {m["id"] for m in allm["data"]}
+    assert len(ids) > 1  # multiple providers' catalogs aggregated
+    # per-provider listing is scoped to that provider (+ mock)
+    one = c.get("/anthropic/v1/models", headers={"x-api-key": tok}).json()
+    owners = {m["owned_by"] for m in one["data"]}
+    assert owners <= {"anthropic", "proxyagent"}
+    assert c.get("/nope/v1/models", headers={"x-api-key": tok}).status_code == 404
+
+
 def test_admin_stats_summary():
     import proxyagent
     c = _client()

@@ -265,7 +265,9 @@ export PROXYAGENT_PROVIDER_BUDGETS='{"anthropic": 200, "openai": 50}'   # $ ceil
 `anthropic` · `openai` · `gemini` · `groq` · `openrouter` · `mistral` · `deepseek` ·
 `xai` · `together` — Anthropic uses its Messages API; the rest are OpenAI-compatible.
 Point a harness/agent at `https://proxy.you.com/<provider>/v1` and it routes there.
-Add or override any endpoint with `PROXYAGENT_<NAME>_ENDPOINT`.
+Add or override any endpoint with `PROXYAGENT_<NAME>_ENDPOINT`. A `GET /v1/models` (and
+`/<provider>/v1/models`) returns the routable catalog in OpenAI list shape, so harnesses that
+probe for available models just work.
 
 ## Model remap — rename or reroute models
 Rewrite the requested model before forwarding — rename it, or reroute it to a totally

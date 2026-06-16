@@ -191,6 +191,31 @@ def create_app(config: Config | None = None) -> FastAPI:
         return await _proxy(provider, request, authorization, x_api_key)
 
     # ------------------------------------------------------------------ #
+    # Model listing — OpenAI-shaped {object:"list", data:[…]} so harnesses that
+    # probe /v1/models for available models get an answer (no upstream call).
+    # ------------------------------------------------------------------ #
+    def _models_list(provider_name: str | None = None) -> dict:
+        names = [provider_name] if provider_name else list(PROVIDERS)
+        data = [{"id": mid, "object": "model", "owned_by": n}
+                for n in names for mid in (CATALOG.get(n, {}).get("models") or [])]
+        data.append({"id": "mock", "object": "model", "owned_by": "proxyagent"})
+        return {"object": "list", "data": data}
+
+    @app.get("/v1/models")
+    async def list_models_all(authorization: str | None = Header(None),
+                              x_api_key: str | None = Header(None)):
+        auth_machine(authorization, x_api_key)
+        return _models_list()
+
+    @app.get("/{provider}/v1/models")
+    async def list_models_provider(provider: str, authorization: str | None = Header(None),
+                                   x_api_key: str | None = Header(None)):
+        auth_machine(authorization, x_api_key)
+        if provider not in PROVIDERS:
+            raise HTTPException(404, f"unknown provider '{provider}'")
+        return _models_list(provider)
+
+    # ------------------------------------------------------------------ #
     # Tools — execute a proxied tool (creds stay here)
     # ------------------------------------------------------------------ #
     @app.get("/v1/tools")
