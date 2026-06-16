@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
 from . import aliases, crypto
@@ -296,6 +296,33 @@ def create_app(config: Config | None = None) -> FastAPI:
         return {"ok": True, "providers": _configured(), "available": sorted(PROVIDERS),
                 "tools": tools.names(), "backend": store.backend,
                 "aliases": len(aliases.get_map())}
+
+    @app.get("/metrics", response_class=PlainTextResponse)
+    async def metrics(authorization: str | None = Header(None),
+                      x_admin_token: str | None = Header(None)):
+        """Prometheus metrics. Admin-gated unless PROXYAGENT_METRICS_PUBLIC=1."""
+        import os as _os
+        if _os.environ.get("PROXYAGENT_METRICS_PUBLIC") != "1":
+            require_admin(authorization, x_admin_token)
+        m = store.metrics()
+        t = m["total"]
+        L = ["# HELP proxyagent_requests_total Proxied requests",
+             "# TYPE proxyagent_requests_total counter",
+             f"proxyagent_requests_total {t['requests']}"]
+        for r in m["by_provider"]:
+            L.append(f'proxyagent_requests_total{{provider="{r["provider"]}"}} {r["n"]}')
+        for r in m["by_status"]:
+            L.append(f'proxyagent_responses_total{{status="{r["status"]}"}} {r["n"]}')
+        L += ["# HELP proxyagent_tokens_total Tokens processed", "# TYPE proxyagent_tokens_total counter",
+              f'proxyagent_tokens_total{{direction="input"}} {t["prompt_tokens"]}',
+              f'proxyagent_tokens_total{{direction="output"}} {t["completion_tokens"]}',
+              "# HELP proxyagent_cost_usd_total Spend in USD", "# TYPE proxyagent_cost_usd_total counter",
+              f"proxyagent_cost_usd_total {t['cost_usd']}"]
+        for r in m["by_provider"]:
+            L.append(f'proxyagent_cost_usd_total{{provider="{r["provider"]}"}} {r["c"]}')
+        L += ["# TYPE proxyagent_active_tokens gauge", f"proxyagent_active_tokens {m['active_tokens']}",
+              "# TYPE proxyagent_credentials gauge", f"proxyagent_credentials {m['credentials']}"]
+        return "\n".join(L) + "\n"
 
     # ------------------------------------------------------------------ #
     # Dashboard

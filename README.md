@@ -113,6 +113,22 @@ proxyagent usage          # totals: requests · tokens · $ cost
 proxyagent logs           # per-request trace incl. cost
 ```
 
+## Deploy
+```bash
+docker compose up -d                 # proxy at :8080; reveal admin token via `docker compose logs`
+# or with shared Postgres:
+docker compose --profile postgres up -d
+```
+A `Dockerfile` (with a `/healthz` HEALTHCHECK) and `docker-compose.yml` (proxy + optional Postgres,
+persistent volume) ship in the repo. Bring keys via a `.env` file. Verified: container builds,
+`/healthz` green, mock call + dashboard serve.
+
+## Observability — Prometheus
+`GET /metrics` exposes `proxyagent_requests_total`, `proxyagent_responses_total{status}`,
+`proxyagent_tokens_total{direction}`, `proxyagent_cost_usd_total{provider}`,
+`proxyagent_active_tokens`, `proxyagent_credentials`. Admin-gated by default; set
+`PROXYAGENT_METRICS_PUBLIC=1` for unauthenticated scraping on an internal network.
+
 ## Security model
 - **Real keys never leave the proxy** — read from env, never persisted, never logged, never returned.
 - **Machine tokens are stored hashed** (SHA-256); plaintext shown once. A stolen DB yields nothing usable.

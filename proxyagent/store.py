@@ -179,5 +179,17 @@ class Store:
                FROM proxy_agent_calls""")
         return r or {"requests": 0, "prompt_tokens": 0, "completion_tokens": 0, "cost_usd": 0}
 
+    def metrics(self) -> dict:
+        total = self.usage_summary()
+        by_provider = self.db.fetchall(
+            "SELECT provider, COUNT(*) n, COALESCE(SUM(cost_usd),0) c FROM proxy_agent_calls "
+            "WHERE provider IS NOT NULL GROUP BY provider")
+        by_status = self.db.fetchall(
+            "SELECT status, COUNT(*) n FROM proxy_agent_calls WHERE status IS NOT NULL GROUP BY status")
+        active_tokens = sum(1 for t in self.list_tokens() if not t["revoked"])
+        credentials = sum(1 for c in self.list_credentials() if c["active"])
+        return {"total": total, "by_provider": by_provider, "by_status": by_status,
+                "active_tokens": active_tokens, "credentials": credentials}
+
     def close(self):
         self.db.close()

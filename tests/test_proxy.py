@@ -261,3 +261,16 @@ def test_vertex_assertion_and_url():
     assert vertex_url("myproj", "us-east5", "claude-sonnet-4-5") == (
         "https://us-east5-aiplatform.googleapis.com/v1/projects/myproj/locations/us-east5"
         "/publishers/anthropic/models/claude-sonnet-4-5:rawPredict")
+
+
+def test_metrics_prometheus():
+    c = _client()
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    c.post("/anthropic/v1/messages", headers={"x-api-key": tok},
+           json={"model": "mock", "messages": [{"role": "user", "content": "hi"}]})
+    assert c.get("/metrics").status_code == 401                  # admin-gated by default
+    r = c.get("/metrics", headers=ADMIN)
+    assert r.status_code == 200 and "text/plain" in r.headers["content-type"]
+    body = r.text
+    assert "proxyagent_requests_total" in body and "proxyagent_cost_usd_total" in body
+    assert 'proxyagent_responses_total{status="200"}' in body and "proxyagent_credentials" in body

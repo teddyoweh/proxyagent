@@ -1,0 +1,37 @@
+# proxyagent — one command to self-host: `docker compose up -d`
+# Bring your own keys via a .env file (PROXYAGENT_ADMIN_TOKEN, PROXYAGENT_SECRET_KEY,
+# ANTHROPIC_API_KEY, OPENAI_API_KEY, …). Reveal the admin token: `docker compose logs proxyagent`.
+services:
+  proxyagent:
+    build: .
+    image: proxyagent:latest
+    ports:
+      - "8080:8080"
+    environment:
+      PROXYAGENT_ADMIN_TOKEN: ${PROXYAGENT_ADMIN_TOKEN:-}
+      PROXYAGENT_SECRET_KEY: ${PROXYAGENT_SECRET_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      # set to use the bundled Postgres instead of the local SQLite volume:
+      PROXYAGENT_DATABASE_URL: ${PROXYAGENT_DATABASE_URL:-}
+    volumes:
+      - proxyagent_data:/data
+    restart: unless-stopped
+
+  # optional shared Postgres — enable with `docker compose --profile postgres up -d`
+  # and set PROXYAGENT_DATABASE_URL=postgresql://proxyagent:proxyagent@postgres:5432/proxyagent
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: proxyagent
+      POSTGRES_PASSWORD: proxyagent
+      POSTGRES_DB: proxyagent
+    volumes:
+      - proxyagent_pg:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  proxyagent_data:
+  proxyagent_pg:
