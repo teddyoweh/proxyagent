@@ -330,6 +330,26 @@ def test_oauth_refresh_helpers():
     assert c["secret"] == "new-tok" and (c["meta"] or {}).get("expires_ms") == 999999999999
 
 
+def test_request_id_echo_and_logged():
+    c = _client()
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    # inbound request id is honoured + echoed + stored on the trace
+    r = c.post("/anthropic/v1/messages",
+               headers={"x-api-key": tok, "x-proxyagent-request-id": "trace-abc-123"},
+               json={"model": "mock", "max_tokens": 10, "messages": [{"role": "user", "content": "hi"}]})
+    assert r.headers.get("x-proxyagent-request-id") == "trace-abc-123"
+    logs = c.get("/admin/logs", headers=ADMIN).json()["logs"]
+    assert logs[0]["request_id"] == "trace-abc-123"
+    # with no inbound id, the proxy mints one (req_…) and still echoes it
+    r2 = c.post("/anthropic/v1/messages", headers={"x-api-key": tok},
+                json={"model": "mock", "max_tokens": 10, "messages": [{"role": "user", "content": "yo"}]})
+    rid = r2.headers.get("x-proxyagent-request-id")
+    assert rid and rid.startswith("req_")
+    # request id rides through to the CSV export
+    csv = c.get("/admin/logs/export", headers=ADMIN).text
+    assert "request_id" in csv.splitlines()[0] and "trace-abc-123" in csv
+
+
 def test_provider_budget_402(monkeypatch):
     """A provider-wide cost ceiling returns 402 once the provider's total spend crosses it,
     regardless of which token calls."""
@@ -509,7 +529,7 @@ def test_log_trim_and_export_endpoints():
     exp = c.get("/admin/logs/export", headers=ADMIN)
     assert exp.status_code == 200 and exp.headers["content-type"].startswith("text/csv")
     lines = exp.text.strip().splitlines()
-    assert lines[0].startswith("ts_ms,token_id,token_label,provider,model")
+    assert lines[0].startswith("ts_ms,request_id,token_id,token_label,provider,model")
     assert any("mock" in ln for ln in lines[1:])
     # trim with days=0 wipes everything; bad input rejected
     assert c.post("/admin/logs/trim", headers=ADMIN, params={"days": -1}).status_code == 400

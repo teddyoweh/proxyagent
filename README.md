@@ -167,6 +167,12 @@ requests are served from memory — saving upstream cost + latency. Cache hits r
 `x-proxyagent-cache: hit`; bypass per-request with header `x-proxyagent-cache: no`. Hits/size are
 in `/metrics`.
 
+## Request tracing
+Every proxied response carries `x-proxyagent-request-id`. Send your own
+(`x-proxyagent-request-id: <id>`) and the proxy honours + echoes it; omit it and the proxy mints
+one (`req_…`). The id is stored on the call trace (`proxy_agent_calls.request_id`, in `logs` and
+the CSV export), so a client log line ties straight to a row in the audit trail.
+
 ## Observability — Prometheus
 `GET /metrics` exposes `proxyagent_requests_total`, `proxyagent_responses_total{status}`,
 `proxyagent_tokens_total{direction}`, `proxyagent_cost_usd_total{provider}`,
@@ -188,9 +194,12 @@ import proxyagent
 # host the proxy (embed in your own service):
 app = proxyagent.create_app()              # ASGI app
 
-# mint tokens programmatically:
+# mint tokens + manage the proxy programmatically:
 admin = proxyagent.Admin("https://proxy.you.com", "pa_admin_…")
 token = admin.mint("ci-runner", scope=["anthropic:claude-*"], ttl_seconds=3600)
+admin.usage_by_token()                     # per-token spend breakdown
+admin.test_credential(cred_id)             # ping a stored credential's upstream
+csv = admin.export_logs(); admin.trim_logs(days=30)   # audit trail: export + retention
 
 # run a harness on this machine, no key here:
 proxyagent.run("claude-code", goal="build the app",

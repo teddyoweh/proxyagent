@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS proxy_agent_calls (
     id TEXT PRIMARY KEY, ts_ms BIGINT, token_id TEXT, token_label TEXT,
     provider TEXT, model TEXT, status INTEGER,
     prompt_tokens INTEGER, completion_tokens INTEGER, latency_ms INTEGER,
-    streamed INTEGER, tools_used TEXT, cost_usd DOUBLE PRECISION, error TEXT
+    streamed INTEGER, tools_used TEXT, cost_usd DOUBLE PRECISION, error TEXT,
+    request_id TEXT
 );
 """
 
@@ -49,7 +50,8 @@ class Store:
         self.backend = "postgres" if self.db.pg else "sqlite"
         # migrate older DBs created before budget_usd existed
         for stmt in ("ALTER TABLE proxy_agent_tokens ADD COLUMN budget_usd DOUBLE PRECISION",
-                     "ALTER TABLE proxy_agent_keys ADD COLUMN masked TEXT"):
+                     "ALTER TABLE proxy_agent_keys ADD COLUMN masked TEXT",
+                     "ALTER TABLE proxy_agent_calls ADD COLUMN request_id TEXT"):
             try:
                 self.db.execute(stmt)
             except Exception:
@@ -187,7 +189,7 @@ class Store:
         kw.setdefault("ts_ms", now_ms())
         cols = ["id", "ts_ms", "token_id", "token_label", "provider", "model", "status",
                 "prompt_tokens", "completion_tokens", "latency_ms", "streamed",
-                "tools_used", "cost_usd", "error"]
+                "tools_used", "cost_usd", "error", "request_id"]
         self.db.execute(
             f"INSERT INTO proxy_agent_calls ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
             tuple(kw.get(c) for c in cols))

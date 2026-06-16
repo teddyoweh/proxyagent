@@ -105,6 +105,10 @@ def create_app(config: Config | None = None) -> FastAPI:
         token = auth_machine(authorization, x_api_key)
         if provider not in PROVIDERS:
             raise HTTPException(404, f"unknown provider '{provider}' (known: {list(PROVIDERS)})")
+        # Request id for tracing — honour an inbound one, else mint. Echoed on the response
+        # and stored on the call trace so a client log line ties to a proxy_agent_calls row.
+        import uuid as _uuid
+        rid = (request.headers.get("x-proxyagent-request-id") or "")[:128] or "req_" + _uuid.uuid4().hex[:16]
         body = await request.json()
         # model remap — may rename the model and/or reroute to another provider
         provider, model = aliases.remap(provider, body.get("model", ""))
@@ -144,10 +148,12 @@ def create_app(config: Config | None = None) -> FastAPI:
                 except ValueError:
                     pass
             status, payload, steps = await forward_agentic(
-                config, provider, body, token=token, store=store, tools=tools, max_steps=max_steps)
+                config, provider, body, token=token, store=store, tools=tools,
+                max_steps=max_steps, request_id=rid)
             return JSONResponse(payload, status_code=status,
                                 headers={"x-proxyagent-tool-steps": str(steps),
-                                         "x-proxyagent-tool-steps-max": str(max_steps)})
+                                         "x-proxyagent-tool-steps-max": str(max_steps),
+                                         "x-proxyagent-request-id": rid})
 
         # Response cache (non-streaming only): serve identical requests from memory.
         ck = None
@@ -157,17 +163,19 @@ def create_app(config: Config | None = None) -> FastAPI:
             if hit is not None:
                 store.log_request(token_id=token["id"], token_label=token.get("label"),
                                   provider=provider, model=model, status=200, cost_usd=0.0,
-                                  tools_used='["cache-hit"]')
-                return JSONResponse(hit, status_code=200, headers={"x-proxyagent-cache": "hit"})
+                                  tools_used='["cache-hit"]', request_id=rid)
+                return JSONResponse(hit, status_code=200,
+                                    headers={"x-proxyagent-cache": "hit", "x-proxyagent-request-id": rid})
 
         status, headers, payload, _ = await forward(
             config, provider, body, streaming=streaming, token=token, store=store,
-            tools_used=used_tools)
+            tools_used=used_tools, request_id=rid)
         if streaming:
-            return StreamingResponse(payload, media_type="text/event-stream")
+            return StreamingResponse(payload, media_type="text/event-stream",
+                                     headers={"x-proxyagent-request-id": rid})
         if ck is not None and status == 200 and isinstance(payload, dict):
             cache.put(ck, payload)
-        return JSONResponse(payload, status_code=status)
+        return JSONResponse(payload, status_code=status, headers={"x-proxyagent-request-id": rid})
 
     # OpenAI-compatible providers hit /<provider>/v1/chat/completions; Anthropic-style
     # hit /<provider>/v1/messages. The provider segment selects the upstream.
@@ -255,7 +263,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         require_admin(authorization, x_admin_token)
         import csv
         import io
-        cols = ["ts_ms", "token_id", "token_label", "provider", "model", "status",
+        cols = ["ts_ms", "request_id", "token_id", "token_label", "provider", "model", "status",
                 "prompt_tokens", "completion_tokens", "cost_usd", "latency_ms",
                 "streamed", "tools_used", "error"]
         buf = io.StringIO()

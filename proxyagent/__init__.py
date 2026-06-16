@@ -16,7 +16,7 @@ from typing import Optional
 
 from .harness import run  # noqa: F401  (the headline SDK call)
 
-__version__ = "0.21.0"
+__version__ = "0.22.0"
 __all__ = ["run", "serve", "create_app", "Config", "Admin", "__version__"]
 
 
@@ -79,3 +79,25 @@ class Admin:
 
     def usage(self) -> dict:
         return self._c.get("/admin/usage").json()
+
+    def usage_by_token(self) -> list:
+        """Per-token spend breakdown — which machine token is costing what."""
+        return self._c.get("/admin/usage-by-token").json()["tokens"]
+
+    def export_logs(self, limit: int = 100_000) -> str:
+        """The audit trail as CSV text (for SIEM / archival)."""
+        r = self._c.get("/admin/logs/export", params={"limit": limit})
+        r.raise_for_status()
+        return r.text
+
+    def trim_logs(self, days: int = 30) -> int:
+        """Delete call traces older than `days`; returns the number removed."""
+        r = self._c.post("/admin/logs/trim", params={"days": days})
+        r.raise_for_status()
+        return r.json()["deleted"]
+
+    def test_credential(self, cred_id: str) -> dict:
+        """Ping the upstream with a stored credential; reports ok / reachable / auth."""
+        r = self._c.post(f"/admin/providers/{cred_id}/test")
+        r.raise_for_status()
+        return r.json()

@@ -123,6 +123,7 @@ def _extract_usage(provider: str, payload: dict) -> tuple[int | None, int | None
 async def forward(
     config: Config, provider_name: str, body: dict,
     *, streaming: bool, token: dict, store: Store, tools_used: list[str] | None = None,
+    request_id: str | None = None,
 ):
     """Forward a request upstream. Returns (status, headers, body_iter_or_dict, log_after)."""
     provider = PROVIDERS[provider_name]
@@ -138,7 +139,7 @@ async def forward(
             model=model, status=200, prompt_tokens=ptok, completion_tokens=ctok,
             latency_ms=now_ms() - t0, streamed=1 if streaming else 0,
             tools_used=json.dumps(tools_used or []), cost_usd=pricing.cost_usd(model, ptok, ctok),
-            error=None)
+            error=None, request_id=request_id)
         if streaming:
             return 200, {"content-type": "text/event-stream"}, _mock_stream(provider.shape, payload), None
         return 200, {"content-type": "application/json"}, payload, None
@@ -154,7 +155,7 @@ async def forward(
             model=model, status=status, prompt_tokens=ptok, completion_tokens=ctok,
             latency_ms=now_ms() - t0, streamed=1 if streaming else 0,
             tools_used=json.dumps(tools_used or []), cost_usd=pricing.cost_usd(model, ptok, ctok),
-            error=err,
+            error=err, request_id=request_id,
         )
 
     if streaming:
@@ -240,7 +241,7 @@ def _append_tool_turn(shape: str, body: dict, payload: dict, results: list[tuple
 
 
 async def forward_agentic(config: Config, provider_name: str, body: dict, *, token: dict,
-                          store: Store, tools, max_steps: int = 6):
+                          store: Store, tools, max_steps: int = 6, request_id: str | None = None):
     """Non-streaming agentic loop: forward, and while the model asks to use a tool the proxy
     MANAGES, execute it server-side, append the result, and re-call — until a final answer or
     max_steps. The machine never holds the tool's credentials. Returns (status, payload, steps)."""
@@ -248,7 +249,8 @@ async def forward_agentic(config: Config, provider_name: str, body: dict, *, tok
     steps = 0
     while True:
         status, _h, payload, _ = await forward(config, provider_name, body, streaming=False,
-                                               token=token, store=store, tools_used=tools.names())
+                                               token=token, store=store, tools_used=tools.names(),
+                                               request_id=request_id)
         if status != 200 or not isinstance(payload, dict):
             return status, payload, steps
         calls = _extract_tool_calls(shape, payload)
