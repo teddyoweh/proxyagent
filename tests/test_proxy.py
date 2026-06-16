@@ -211,7 +211,13 @@ def test_sdk_run_agent_keyless(monkeypatch):
     code = proxyagent.run("build the app", harness="codex", token="pa_machine",
                           proxy="https://proxy.you.com")
     assert code == 0
-    assert captured["argv"] == ["codex", "exec", "build the app"]
+    argv = captured["argv"]
+    assert argv[:2] == ["codex", "exec"] and argv[-1] == "build the app"
+    # codex is forced through the proxy as a custom api-key provider on the chat wire API
+    joined = " ".join(argv)
+    assert "model_provider=proxyagent" in joined
+    assert "model_providers.proxyagent.base_url=https://proxy.you.com/openai/v1" in joined
+    assert "model_providers.proxyagent.wire_api=chat" in joined
     env = captured["env"]
     assert env["OPENAI_BASE_URL"] == "https://proxy.you.com/openai/v1"
     assert env["ANTHROPIC_BASE_URL"] == "https://proxy.you.com/anthropic"
