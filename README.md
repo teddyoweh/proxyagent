@@ -147,7 +147,8 @@ in `/metrics`.
 - **Real keys never leave the proxy** — read from env, never persisted, never logged, never returned.
 - **Machine tokens are stored hashed** (SHA-256); plaintext shown once. A stolen DB yields nothing usable.
 - **Scoped** (`provider:model` globs), **expiring** (TTL), **revocable**, **rate-limited**.
-- **Constant-time** token comparison; sensitive headers redacted from logs.
+- **Constant-time** token comparison; sensitive headers redacted from logs, and upstream error
+  bodies passed through a **secret redactor** (api keys, bearer tokens, AWS/Google keys, emails) before they touch the audit log.
 - Admin API + dashboard gated by a separate admin token. Run it behind TLS.
 
 ## SDK

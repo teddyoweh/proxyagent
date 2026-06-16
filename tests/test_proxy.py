@@ -306,3 +306,12 @@ def test_provider_rate_limit():
         assert c.post("/openai/v1/chat/completions", headers={"x-api-key": tok}, json=body).status_code == 200
     finally:
         os.environ.pop("PROXYAGENT_PROVIDER_RATE_LIMITS", None)
+
+
+def test_redact_secrets():
+    from proxyagent.redact import redact
+    s = redact("boom: sk-abcdefghij1234567890 user a@b.com Bearer abc123xyz789token AKIA0123456789ABCDEF")
+    assert "sk-abcdefghij" not in s and "sk-***" in s
+    assert "a@b.com" not in s and "***@***" in s
+    assert "Bearer ***" in s and "AKIA***" in s
+    assert redact(None) is None and redact("") == ""

@@ -12,7 +12,7 @@ import json
 
 import httpx
 
-from . import pricing, signers
+from . import pricing, redact, signers
 from .config import Config, PROVIDERS
 from .store import Store, now_ms
 
@@ -176,7 +176,8 @@ async def forward(
             except Exception:
                 payload = {"error": resp.text}
             ptok, ctok = _extract_usage(provider.shape, payload if isinstance(payload, dict) else {})
-            _log(resp.status_code, ptok, ctok, None if resp.is_success else str(payload)[:300])
+            _log(resp.status_code, ptok, ctok,
+                 None if resp.is_success else redact.redact(str(payload)[:300]))
             return resp.status_code, {"content-type": "application/json"}, payload, None
     _log(last_status, None, None, "all credentials failed")
     return last_status, {"content-type": "application/json"}, last_payload, None
