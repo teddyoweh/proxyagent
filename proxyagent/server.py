@@ -663,17 +663,21 @@ def create_app(config: Config | None = None) -> FastAPI:
         for c in store.list_credentials():   # include disabled creds so they can be re-enabled
             pool.setdefault(c["provider"], []).append(c)
         out = []
-        for name, prov in PROVIDERS.items():
-            meta = CATALOG.get(name, {})
+        # Only the curated CATALOG providers (the ones that back a supported harness:
+        # Anthropic → Claude Code, OpenAI → Codex). Other endpoints are routable but not
+        # surfaced in the create-key UI.
+        for name, meta in CATALOG.items():
+            prov = PROVIDERS.get(name)
             creds = pool.get(name, [])
             out.append({
                 "name": name, "label": meta.get("label", name.title()),
                 "kinds": meta.get("kinds", ["api_key"]), "color": meta.get("color", "#888"),
-                "models": meta.get("models", []), "shape": prov.shape,
-                "via_env": bool(prov.key), "via_store": any(c["active"] for c in creds),
+                "models": meta.get("models", []), "shape": prov.shape if prov else "openai",
+                "harness": meta.get("harness"),
+                "via_env": bool(prov and prov.key), "via_store": any(c["active"] for c in creds),
                 "creds": [{"id": c["id"], "kind": c["kind"], "masked": c.get("masked"),
                            "label": c.get("label"), "active": bool(c["active"])} for c in creds],
-                "endpoint": prov.endpoint,
+                "endpoint": prov.endpoint if prov else "",
             })
         return {"providers": out, "encryption": crypto.encryption_available()}
 

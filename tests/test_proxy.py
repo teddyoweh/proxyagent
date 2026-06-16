@@ -354,7 +354,7 @@ def test_harness_catalog():
     c = _client()
     h = c.get("/admin/harnesses", headers=ADMIN).json()["harnesses"]
     names = {x["name"] for x in h}
-    assert {"claude-code", "codex", "gemini-cli"} <= names
+    assert {"claude-code", "codex"} <= names   # the supported harnesses
     cc = next(x for x in h if x["name"] == "claude-code")
     assert {a["mode"] for a in cc["auth"]} == {"api_key", "oauth", "bedrock", "vertex"}
     assert any(a["mode"] == "api_key" and a["ready"] for a in cc["auth"])
