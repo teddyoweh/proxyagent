@@ -215,7 +215,9 @@ export PROXYAGENT_CORS_ORIGINS="https://app.you.com,https://staging.you.com"
 ## Security model
 - **Real keys never leave the proxy** — read from env, never persisted, never logged, never returned.
 - **Machine tokens are stored hashed** (SHA-256); plaintext shown once. A stolen DB yields nothing usable.
-- **Scoped** (`provider:model` globs), **expiring** (TTL), **revocable**, **rate-limited**.
+- **Scoped** (`provider:model` globs), **expiring** (TTL), **revocable**, **rate-limited**, and
+  optionally **IP-locked** (mint with `allowed_ips` CIDRs; off-list clients get `403`, honouring
+  `X-Forwarded-For` behind a proxy).
 - **Constant-time** token comparison; sensitive headers redacted from logs, and upstream error
   bodies passed through a **secret redactor** (api keys, bearer tokens, AWS/Google keys, emails) before they touch the audit log.
 - Admin API + dashboard gated by a separate admin token. Run it behind TLS.

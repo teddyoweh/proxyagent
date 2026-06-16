@@ -59,6 +59,29 @@ def test_admin_requires_auth():
     assert c.get("/admin/tokens", headers=ADMIN).status_code == 200
 
 
+def test_token_ip_allowlist():
+    """A token restricted to a CIDR rejects requests from outside it (via X-Forwarded-For)."""
+    c = _client()
+    tok = c.post("/admin/tokens", headers=ADMIN,
+                 json={"scope": ["*"], "allowed_ips": ["10.0.0.0/8"]}).json()["token"]
+    body = {"model": "mock", "max_tokens": 5, "messages": [{"role": "user", "content": "hi"}]}
+    # in-range → allowed
+    ok = c.post("/anthropic/v1/messages",
+                headers={"x-api-key": tok, "x-forwarded-for": "10.1.2.3"}, json=body)
+    assert ok.status_code == 200
+    # out-of-range → 403
+    no = c.post("/anthropic/v1/messages",
+                headers={"x-api-key": tok, "x-forwarded-for": "203.0.113.5"}, json=body)
+    assert no.status_code == 403 and "not allowed" in no.json()["detail"]
+    # a token WITHOUT an allow-list is unrestricted
+    free = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    assert c.post("/anthropic/v1/messages",
+                  headers={"x-api-key": free, "x-forwarded-for": "203.0.113.5"}, json=body).status_code == 200
+    # the allow-list shows up in the token listing
+    listed = c.get("/admin/tokens", headers=ADMIN).json()["tokens"]
+    assert any(t.get("allowed_ips") == ["10.0.0.0/8"] for t in listed)
+
+
 def test_mint_and_use_scope_enforcement():
     c = _client()
     r = c.post("/admin/tokens", headers=ADMIN, json={"label": "m", "scope": ["anthropic:claude-*"]})

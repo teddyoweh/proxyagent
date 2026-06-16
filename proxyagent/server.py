@@ -33,6 +33,7 @@ class TokenBody(BaseModel):
     ttl_seconds: int | None = None
     rate_limit: int = 0
     budget_usd: float | None = None
+    allowed_ips: list[str] | None = None      # CIDRs; requests from outside → 403
 
 
 class TokenPatch(BaseModel):
@@ -137,7 +138,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             return authorization[7:].strip()
         return x_api_key
 
-    def auth_machine(authorization, x_api_key) -> dict:
+    def auth_machine(authorization, x_api_key, client_ip: str | None = None) -> dict:
         from .security import hash_token
         tok = _bearer(authorization, x_api_key)
         if not tok:
@@ -147,6 +148,18 @@ def create_app(config: Config | None = None) -> FastAPI:
             raise HTTPException(401, "invalid or revoked token")
         if row["expires_ms"] and row["expires_ms"] < now_ms():
             raise HTTPException(401, "token expired")
+        allowed = row.get("allowed_ips")
+        if allowed:
+            import ipaddress
+            cidrs = _json.loads(allowed)
+            ok = False
+            try:
+                ip = ipaddress.ip_address(client_ip or "")
+                ok = any(ip in ipaddress.ip_network(c, strict=False) for c in cidrs)
+            except ValueError:
+                ok = False
+            if not ok:
+                raise HTTPException(403, "client IP not allowed for this token")
         if row["rate_limit"] and store.recent_request_count(row["id"]) >= row["rate_limit"]:
             raise HTTPException(429, "rate limit exceeded")
         budget = row.get("budget_usd")
@@ -172,8 +185,12 @@ def create_app(config: Config | None = None) -> FastAPI:
     # ------------------------------------------------------------------ #
     # Provider proxy endpoints
     # ------------------------------------------------------------------ #
+    def _client_ip(request: Request) -> str:
+        fwd = request.headers.get("x-forwarded-for", "")
+        return fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "")
+
     async def _proxy(provider: str, request: Request, authorization, x_api_key):
-        token = auth_machine(authorization, x_api_key)
+        token = auth_machine(authorization, x_api_key, client_ip=_client_ip(request))
         if provider not in PROVIDERS:
             raise HTTPException(404, f"unknown provider '{provider}' (known: {list(PROVIDERS)})")
         # Request id for tracing — honour an inbound one, else mint. Echoed on the response
@@ -323,7 +340,8 @@ def create_app(config: Config | None = None) -> FastAPI:
                            x_admin_token: str | None = Header(None)):
         require_admin(authorization, x_admin_token)
         plain, row = store.create_token(body.label, body.scope, ttl_seconds=body.ttl_seconds,
-                                        rate_limit=body.rate_limit, budget_usd=body.budget_usd)
+                                        rate_limit=body.rate_limit, budget_usd=body.budget_usd,
+                                        allowed_ips=body.allowed_ips)
         _event("token_created", {"id": row["id"], "label": row["label"], "scope": body.scope})
         return {"token": plain, "id": row["id"], "label": row["label"],
                 "scope": body.scope, "budget_usd": body.budget_usd, "note": "shown once — store it now"}
@@ -339,7 +357,8 @@ def create_app(config: Config | None = None) -> FastAPI:
                         "rate_limit": t["rate_limit"], "expires_ms": t["expires_ms"],
                         "last_used_ms": t["last_used_ms"], "budget_usd": t.get("budget_usd"),
                         "spent_usd": round(store.token_spend(t["id"]), 6),
-                        "requests": store.token_request_count(t["id"])})
+                        "requests": store.token_request_count(t["id"]),
+                        "allowed_ips": _json.loads(t["allowed_ips"]) if t.get("allowed_ips") else None})
         if q:
             ql = q.lower()
             out = [t for t in out if ql in (t["label"] or "").lower() or ql in t["id"].lower()

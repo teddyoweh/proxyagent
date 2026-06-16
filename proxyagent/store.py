@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS proxy_agent_tokens (
     id TEXT PRIMARY KEY, hash TEXT NOT NULL UNIQUE, label TEXT,
     scope_json TEXT NOT NULL DEFAULT '["*"]', rate_limit INTEGER NOT NULL DEFAULT 0,
     created_ms BIGINT, expires_ms BIGINT, revoked INTEGER NOT NULL DEFAULT 0,
-    last_used_ms BIGINT, masked TEXT, budget_usd DOUBLE PRECISION
+    last_used_ms BIGINT, masked TEXT, budget_usd DOUBLE PRECISION, allowed_ips TEXT
 );
 CREATE TABLE IF NOT EXISTS proxy_agent_keys (
     id TEXT PRIMARY KEY, provider TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'api_key',
@@ -50,6 +50,7 @@ class Store:
         self.backend = "postgres" if self.db.pg else "sqlite"
         # migrate older DBs created before budget_usd existed
         for stmt in ("ALTER TABLE proxy_agent_tokens ADD COLUMN budget_usd DOUBLE PRECISION",
+                     "ALTER TABLE proxy_agent_tokens ADD COLUMN allowed_ips TEXT",
                      "ALTER TABLE proxy_agent_keys ADD COLUMN masked TEXT",
                      "ALTER TABLE proxy_agent_calls ADD COLUMN request_id TEXT"):
             try:
@@ -59,16 +60,18 @@ class Store:
 
     # -- machine tokens ---------------------------------------------------- #
 
-    def create_token(self, label, scope, *, ttl_seconds=None, rate_limit=0, budget_usd=None):
+    def create_token(self, label, scope, *, ttl_seconds=None, rate_limit=0, budget_usd=None,
+                     allowed_ips=None):
         plain = new_token()
         tid = "tok_" + uuid.uuid4().hex[:12]
         expires = now_ms() + ttl_seconds * 1000 if ttl_seconds else None
         self.db.execute(
             """INSERT INTO proxy_agent_tokens
-               (id, hash, label, scope_json, rate_limit, created_ms, expires_ms, masked, budget_usd)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (id, hash, label, scope_json, rate_limit, created_ms, expires_ms, masked,
+                budget_usd, allowed_ips)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (tid, hash_token(plain), label, json.dumps(scope), rate_limit, now_ms(),
-             expires, mask(plain), budget_usd),
+             expires, mask(plain), budget_usd, json.dumps(allowed_ips) if allowed_ips else None),
         )
         return plain, self.get_token(tid)
 
