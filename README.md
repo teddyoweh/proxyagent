@@ -91,6 +91,14 @@ export PROXYAGENT_TOOLS='[{"name":"crm","url":"https://hooks.you.com/crm","heade
 # the proxy executes calls to managed tools server-side (keys stay here).
 ```
 
+**Server-side agentic loop.** With `x-proxyagent-tools: on` (non-streaming), the proxy runs
+the *whole* tool loop for you: model asks to use a tool → proxy **executes it server-side**
+(its credentials never leave the proxy) → appends the `tool_result` → re-calls the model →
+repeats until a final answer (capped at 6 steps). The agent just sends one request and gets
+the finished answer back; the response carries `x-proxyagent-tool-steps: <n>`. Works on both
+Anthropic (`tool_use`) and OpenAI (`tool_calls`) shapes. Try it offline with `model: "mock"` —
+the mock emits a real `tool_use`, so the loop runs end-to-end with no keys.
+
 ## Credentials, storage & cost
 
 By default provider keys come from the **environment** and stay local. Or **add** them

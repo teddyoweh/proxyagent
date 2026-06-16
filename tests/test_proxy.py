@@ -330,6 +330,37 @@ def test_oauth_refresh_helpers():
     assert c["secret"] == "new-tok" and (c["meta"] or {}).get("expires_ms") == 999999999999
 
 
+def test_server_side_tool_loop(monkeypatch):
+    """Full agentic loop offline: mock asks to call a tool → proxy executes it server-side
+    → appends tool_result → re-calls → mock returns a final answer citing the tool output."""
+    import json as _j
+    monkeypatch.setenv("PROXYAGENT_DISABLE_WEB_SEARCH", "1")  # only our local echo tool is offered
+    c = _client()
+    from proxyagent.tools import Tool
+
+    async def _echo(args):
+        return f"ECHO[{args.get('query', '')}]"
+    c.app.state.tools.register(Tool(
+        "echo", "echo back the query",
+        {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}, _echo))
+
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    # Anthropic shape
+    r = c.post("/anthropic/v1/messages", headers={"x-api-key": tok, "x-proxyagent-tools": "on"},
+               json={"model": "mock", "max_tokens": 50, "messages": [{"role": "user", "content": "ping"}]})
+    assert r.status_code == 200
+    assert r.headers.get("x-proxyagent-tool-steps") == "1"   # exactly one tool round-trip
+    body = r.json()
+    assert body["stop_reason"] == "end_turn"                 # ended with a final answer, not tool_use
+    assert "ECHO[ping]" in _j.dumps(body)                    # the tool actually ran server-side
+    # OpenAI shape too
+    r2 = c.post("/openai/v1/chat/completions", headers={"authorization": f"Bearer {tok}", "x-proxyagent-tools": "on"},
+                json={"model": "mock", "messages": [{"role": "user", "content": "hey"}]})
+    assert r2.headers.get("x-proxyagent-tool-steps") == "1"
+    assert "ECHO[hey]" in _j.dumps(r2.json())
+    assert r2.json()["choices"][0]["finish_reason"] == "stop"
+
+
 def test_plan_for_credential_per_kind():
     from proxyagent.providers import plan_for_credential
     from proxyagent.config import PROVIDERS

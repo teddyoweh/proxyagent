@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from . import aliases, cache, crypto
 from .config import (AUTH_LABELS, AUTH_READY, CATALOG, HARNESSES, Config, PROVIDERS,
                      provider_rate_limit)
-from .providers import forward, scope_allows, test_credential
+from .providers import forward, forward_agentic, scope_allows, test_credential
 from .security import token_matches
 from .store import Store, now_ms
 from .tools import ToolRegistry
@@ -48,6 +48,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     tools = ToolRegistry(config)
     app = FastAPI(title="proxyagent", version="0.1.0")
     app.state.store = store
+    app.state.tools = tools
 
     # Audit-log retention — trim call traces older than PROXYAGENT_LOG_RETENTION_DAYS
     # on startup so an always-on proxy never grows the log table without bound.
@@ -117,12 +118,21 @@ def create_app(config: Config | None = None) -> FastAPI:
         if rl and store.recent_provider_count(provider) >= rl:
             raise HTTPException(429, f"rate limit for provider '{provider}' exceeded ({rl}/min)")
 
+        tools_on = request.headers.get("x-proxyagent-tools", "").lower() in ("1", "on", "true")
         used_tools: list[str] = []
-        if request.headers.get("x-proxyagent-tools", "").lower() in ("1", "on", "true"):
+        if tools_on:
             body = tools.inject(body, PROVIDERS[provider].shape)
             used_tools = tools.names()
 
         streaming = bool(body.get("stream"))
+
+        # Server-side agentic tool loop: the proxy executes managed tools (keys stay here)
+        # and re-calls the model until it returns a final answer. Non-streaming only.
+        if tools_on and not streaming:
+            status, payload, steps = await forward_agentic(
+                config, provider, body, token=token, store=store, tools=tools)
+            return JSONResponse(payload, status_code=status,
+                                headers={"x-proxyagent-tool-steps": str(steps)})
 
         # Response cache (non-streaming only): serve identical requests from memory.
         ck = None

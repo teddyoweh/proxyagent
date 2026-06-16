@@ -207,6 +207,59 @@ async def forward(
     return last_status, {"content-type": "application/json"}, last_payload, None
 
 
+def _extract_tool_calls(shape: str, payload: dict) -> list[dict]:
+    """Normalise a response's tool requests to [{id, name, args}] across both shapes."""
+    out: list[dict] = []
+    if shape == "anthropic":
+        for blk in payload.get("content") or []:
+            if isinstance(blk, dict) and blk.get("type") == "tool_use":
+                out.append({"id": blk.get("id"), "name": blk.get("name"), "args": blk.get("input") or {}})
+    else:
+        msg = ((payload.get("choices") or [{}])[0]).get("message") or {}
+        for tc in msg.get("tool_calls") or []:
+            fn = tc.get("function") or {}
+            try:
+                args = json.loads(fn.get("arguments") or "{}")
+            except Exception:  # noqa: BLE001 — model emitted bad JSON args
+                args = {}
+            out.append({"id": tc.get("id"), "name": fn.get("name"), "args": args})
+    return out
+
+
+def _append_tool_turn(shape: str, body: dict, payload: dict, results: list[tuple]) -> None:
+    """Append the model's tool-call turn + our tool_result turn back onto the conversation."""
+    msgs = body.setdefault("messages", [])
+    if shape == "anthropic":
+        msgs.append({"role": "assistant", "content": payload.get("content", [])})
+        msgs.append({"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": c["id"], "content": out} for c, out in results]})
+    else:
+        msgs.append(((payload.get("choices") or [{}])[0]).get("message") or {})
+        for c, out in results:
+            msgs.append({"role": "tool", "tool_call_id": c["id"], "content": out})
+
+
+async def forward_agentic(config: Config, provider_name: str, body: dict, *, token: dict,
+                          store: Store, tools, max_steps: int = 6):
+    """Non-streaming agentic loop: forward, and while the model asks to use a tool the proxy
+    MANAGES, execute it server-side, append the result, and re-call — until a final answer or
+    max_steps. The machine never holds the tool's credentials. Returns (status, payload, steps)."""
+    shape = PROVIDERS[provider_name].shape
+    steps = 0
+    while True:
+        status, _h, payload, _ = await forward(config, provider_name, body, streaming=False,
+                                               token=token, store=store, tools_used=tools.names())
+        if status != 200 or not isinstance(payload, dict):
+            return status, payload, steps
+        calls = _extract_tool_calls(shape, payload)
+        managed = [c for c in calls if c.get("name") and tools.manages(c["name"])]
+        if not managed or steps >= max_steps:
+            return status, payload, steps
+        steps += 1
+        results = [(c, await tools.execute(c["name"], c["args"])) for c in managed]
+        _append_tool_turn(shape, body, payload, results)
+
+
 def _ping_body(provider, model: str | None) -> dict:
     """A minimal, cheap request to validate a credential reaches + authenticates upstream."""
     from .config import CATALOG
@@ -260,10 +313,61 @@ def _last_user_text(body: dict) -> str:
     return ""
 
 
+def _has_tool_result(body: dict) -> bool:
+    """True once the conversation already carries a tool_result — i.e. we're on the
+    second leg of an agentic loop and the mock should now answer instead of re-calling."""
+    for m in body.get("messages", []):
+        if m.get("role") == "tool":
+            return True
+        c = m.get("content")
+        if isinstance(c, list) and any(isinstance(b, dict) and b.get("type") == "tool_result" for b in c):
+            return True
+    return False
+
+
+def _last_tool_result_text(body: dict) -> str:
+    for m in reversed(body.get("messages", [])):
+        if m.get("role") == "tool" and isinstance(m.get("content"), str):
+            return m["content"]
+        c = m.get("content")
+        if isinstance(c, list):
+            for b in c:
+                if isinstance(b, dict) and b.get("type") == "tool_result":
+                    out = b.get("content")
+                    return out if isinstance(out, str) else json.dumps(out)
+    return ""
+
+
 def _mock_payload(provider: str, body: dict):
     prompt = _last_user_text(body)[:200]
-    text = f"[proxyagent mock] received: {prompt!r}. No real key used — the pipeline works."
-    ptok, ctok = max(1, len(prompt) // 4), max(1, len(text) // 4)
+    tools = body.get("tools") or []
+    ptok = max(1, len(prompt) // 4)
+
+    # Agentic-loop mock: if tools are offered and we haven't run one yet, ask to call the
+    # first tool — so the full server-side tool loop runs end-to-end with no real key.
+    if tools and not _has_tool_result(body):
+        first = tools[0]
+        name = first.get("name") if provider == "anthropic" else (first.get("function") or {}).get("name")
+        args = {"query": prompt or "proxyagent"}
+        if provider == "anthropic":
+            return ({
+                "id": "msg_mock", "type": "message", "role": "assistant", "model": body.get("model"),
+                "content": [{"type": "tool_use", "id": "toolu_mock", "name": name, "input": args}],
+                "stop_reason": "tool_use", "usage": {"input_tokens": ptok, "output_tokens": 2},
+            }, (ptok, 2))
+        return ({
+            "id": "chatcmpl-mock", "object": "chat.completion", "model": body.get("model"),
+            "choices": [{"index": 0, "finish_reason": "tool_calls", "message": {
+                "role": "assistant", "content": None, "tool_calls": [{
+                    "id": "call_mock", "type": "function",
+                    "function": {"name": name, "arguments": json.dumps(args)}}]}}],
+            "usage": {"prompt_tokens": ptok, "completion_tokens": 2, "total_tokens": ptok + 2},
+        }, (ptok, 2))
+
+    tr = _last_tool_result_text(body)
+    text = (f"[proxyagent mock] received: {prompt!r}. "
+            + (f"tool returned: {tr[:200]}" if tr else "No real key used — the pipeline works."))
+    ctok = max(1, len(text) // 4)
     if provider == "anthropic":
         return ({
             "id": "msg_mock", "type": "message", "role": "assistant", "model": body.get("model"),
