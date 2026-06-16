@@ -175,6 +175,12 @@ Every proxied response carries `x-proxyagent-request-id`. Send your own
 one (`req_…`). The id is stored on the call trace (`proxy_agent_calls.request_id`, in `logs` and
 the CSV export), so a client log line ties straight to a row in the audit trail.
 
+## Operational summary
+`GET /admin/stats` (or `proxyagent.Admin(...).stats()`) returns a one-shot snapshot — version,
+uptime, cache (enabled/ttl/hits/size), active+total tokens, credentials, configured providers,
+total requests and spend. The dashboard's Activity tab shows it as a live stat strip, and the
+Machine-tokens table shows each token's **expiry countdown**.
+
 ## Observability — Prometheus
 `GET /metrics` exposes `proxyagent_requests_total`, `proxyagent_responses_total{status}`,
 `proxyagent_tokens_total{direction}`, `proxyagent_cost_usd_total{provider}`,

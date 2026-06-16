@@ -288,6 +288,24 @@ def create_app(config: Config | None = None) -> FastAPI:
                 "tools": tools.list(), "backend": store.backend,
                 "encryption": crypto.encryption_available()}
 
+    @app.get("/admin/stats")
+    async def stats_ep(authorization: str | None = Header(None),
+                       x_admin_token: str | None = Header(None)):
+        """One-shot operational summary: version, uptime, cache, counts, spend."""
+        require_admin(authorization, x_admin_token)
+        from . import __version__
+        m = store.metrics()
+        cs = cache.stats()
+        toks = store.list_tokens()
+        return {
+            "version": __version__, "uptime_s": round(time.time() - started_at),
+            "backend": store.backend, "encryption": crypto.encryption_available(),
+            "cache": {"enabled": cache.enabled(), "ttl_s": cs["ttl"], "hits": cs["hits"], "size": cs["size"]},
+            "tokens": {"active": sum(1 for t in toks if not t["revoked"]), "total": len(toks)},
+            "credentials": m["credentials"], "providers": _configured(),
+            "requests": m["total"]["requests"], "cost_usd": round(m["total"]["cost_usd"] or 0, 6),
+        }
+
     @app.get("/admin/usage-by-model")
     async def usage_by_model_ep(authorization: str | None = Header(None),
                                 x_admin_token: str | None = Header(None)):

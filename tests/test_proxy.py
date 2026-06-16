@@ -350,6 +350,22 @@ def test_credential_toggle_active():
     assert c.post("/admin/providers/key_nope/toggle", headers=ADMIN).status_code == 404
 
 
+def test_admin_stats_summary():
+    import proxyagent
+    c = _client()
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"], "ttl_seconds": 3600}).json()["token"]
+    c.post("/anthropic/v1/messages", headers={"x-api-key": tok},
+           json={"model": "mock", "max_tokens": 10, "messages": [{"role": "user", "content": "hi"}]})
+    s = c.get("/admin/stats", headers=ADMIN).json()
+    assert s["version"] == proxyagent.__version__ and s["uptime_s"] >= 0
+    assert s["requests"] >= 1 and s["tokens"]["active"] >= 1
+    assert set(s["cache"]) == {"enabled", "ttl_s", "hits", "size"}
+    assert c.get("/admin/stats").status_code == 401
+    # the TTL token carries expires_ms for the UI countdown
+    t = c.get("/admin/tokens", headers=ADMIN).json()["tokens"][0]
+    assert t["expires_ms"] and t["expires_ms"] > 0
+
+
 def test_healthz_version_uptime():
     import proxyagent
     c = _client()

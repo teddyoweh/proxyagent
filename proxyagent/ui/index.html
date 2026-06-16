@@ -105,7 +105,7 @@
         </div>
         <div id="tk_out" class="tok hide"></div>
       </div>
-      <div class="card"><table><thead><tr><th>ID</th><th>Label</th><th>Token</th><th>Scope</th><th>Budget</th><th>Last used</th><th>Status</th><th></th></tr></thead><tbody id="toks"></tbody></table></div>
+      <div class="card"><table><thead><tr><th>ID</th><th>Label</th><th>Token</th><th>Scope</th><th>Budget</th><th>Last used</th><th>Expires</th><th>Status</th><th></th></tr></thead><tbody id="toks"></tbody></table></div>
     </section>
 
     <section id="t_models" class="hide">
@@ -130,6 +130,7 @@
 
     <section id="t_activity" class="hide">
       <div class="h"><h2>Activity</h2><div class="row" style="gap:8px"><button class="ghost sm" onclick="exportLogs()">Export CSV</button><button class="ghost sm" onclick="trimLogs()">Trim &gt;30d</button></div></div>
+      <div class="card" id="statstrip" style="margin-bottom:16px;display:flex;gap:28px;flex-wrap:wrap;font-size:13px"></div>
       <div class="row" style="gap:16px;align-items:flex-start">
         <div style="flex:1;min-width:0">
           <div class="label" style="margin-bottom:8px">Spend by token</div>
@@ -167,6 +168,7 @@ const H=()=>({"x-admin-token":A(),"content-type":"application/json"});
 async function api(p,o={}){const r=await fetch(p,{...o,headers:{...H(),...(o.headers||{})}});if(r.status===401){logout();throw new Error("401")}return r}
 function val(id){const e=document.getElementById(id);return e?e.value.trim():""}
 function rel(ms){if(!ms)return"never";const s=Math.max(0,(Date.now()-ms)/1000);if(s<60)return"just now";if(s<3600)return Math.floor(s/60)+"m ago";if(s<86400)return Math.floor(s/3600)+"h ago";return Math.floor(s/86400)+"d ago"}
+function ttl(ms){if(!ms)return"never";const s=(ms-Date.now())/1000;if(s<=0)return"expired";if(s<60)return"in "+Math.floor(s)+"s";if(s<3600)return"in "+Math.floor(s/60)+"m";if(s<86400)return"in "+Math.floor(s/3600)+"h";return"in "+Math.floor(s/86400)+"d"}
 function saveAdmin(){const v=document.getElementById("admintok").value.trim();if(v){localStorage.setItem("pa_admin",v);boot()}}
 function logout(){localStorage.removeItem("pa_admin");document.getElementById("app").classList.add("hide");document.getElementById("gate").classList.remove("hide")}
 function nav(t){document.querySelectorAll(".navitem").forEach(e=>e.classList.toggle("on",e.dataset.t===t));["keys","tokens","models","activity"].forEach(s=>document.getElementById("t_"+s).classList.toggle("hide",s!==t))}
@@ -252,7 +254,7 @@ function pickKind(k){
 async function createKey(){if(await submitCred("cf",cfProvider))closeCreate()}
 
 async function refreshTokens(){const d=await(await api("/admin/tokens")).json();
-  document.getElementById("toks").innerHTML=d.tokens.map(t=>`<tr><td class="mono">${t.id}</td><td>${t.label||""}</td><td class="mono">${t.masked||""}</td><td class="mono">${(t.scope||[]).join(", ")}</td><td class="mono">${t.budget_usd?('$'+(t.spent_usd||0).toFixed(4)+' / $'+(+t.budget_usd).toFixed(2)):'—'}</td><td class="muted" style="font-size:12px">${rel(t.last_used_ms)}</td><td>${t.revoked?'<span class="pill no">revoked</span>':'<span class="pill ok">active</span>'}</td><td>${t.revoked?"":`<button class="danger sm" onclick="revokeTok('${t.id}')">revoke</button>`}</td></tr>`).join("")}
+  document.getElementById("toks").innerHTML=d.tokens.map(t=>`<tr><td class="mono">${t.id}</td><td>${t.label||""}</td><td class="mono">${t.masked||""}</td><td class="mono">${(t.scope||[]).join(", ")}</td><td class="mono">${t.budget_usd?('$'+(t.spent_usd||0).toFixed(4)+' / $'+(+t.budget_usd).toFixed(2)):'—'}</td><td class="muted" style="font-size:12px">${rel(t.last_used_ms)}</td><td class="muted" style="font-size:12px">${ttl(t.expires_ms)}</td><td>${t.revoked?'<span class="pill no">revoked</span>':(t.expires_ms&&t.expires_ms<Date.now()?'<span class="pill no">expired</span>':'<span class="pill ok">active</span>')}</td><td>${t.revoked?"":`<button class="danger sm" onclick="revokeTok('${t.id}')">revoke</button>`}</td></tr>`).join("")}
 async function mintToken(){const body={label:val("tk_label")||"machine",scope:(val("tk_scope")||"*").split(",").map(s=>s.trim()),ttl_seconds:parseInt(val("tk_ttl"))||null,budget_usd:parseFloat(val("tk_budget"))||null};
   const d=await(await api("/admin/tokens",{method:"POST",body:JSON.stringify(body)})).json();
   const el=document.getElementById("tk_out");el.classList.remove("hide");el.innerHTML=`<b>Token (shown once):</b> <button class="ghost sm" onclick="navigator.clipboard.writeText('${d.token}');this.textContent='copied'">copy</button><br/><span class="mono">${d.token}</span>`;refreshTokens()}
@@ -273,7 +275,12 @@ async function refreshSpend(){const d=await(await api("/admin/usage-by-token")).
     const bud=t.budget_usd?`$${t.cost_usd.toFixed(4)} / $${(+t.budget_usd).toFixed(2)}${t.budget_pct!=null?` <span class="muted">(${t.budget_pct}%)</span>`:""}`:'—';
     return `<tr><td>${t.label||""} <span class="mono muted">${t.masked||""}</span>${t.revoked?' <span class="pill no">revoked</span>':''}</td><td>${t.requests}</td><td>${t.prompt_tokens}</td><td>${t.completion_tokens}</td><td class="mono">$${t.cost_usd.toFixed(4)}</td><td class="mono">${bud}</td></tr>`}).join("")||'<tr><td class="muted" colspan="6">No spend yet.</td></tr>';refreshModels()}
 async function refreshModels(){const d=await(await api("/admin/usage-by-model")).json();
-  document.getElementById("spendm").innerHTML=d.models.map(m=>`<tr><td class="mono">${m.provider||""}:${(m.model||"").slice(0,20)}</td><td>${m.requests}</td><td>${m.prompt_tokens}</td><td>${m.completion_tokens}</td><td class="mono">$${m.cost_usd.toFixed(4)}</td></tr>`).join("")||'<tr><td class="muted" colspan="5">No spend yet.</td></tr>'}
+  document.getElementById("spendm").innerHTML=d.models.map(m=>`<tr><td class="mono">${m.provider||""}:${(m.model||"").slice(0,20)}</td><td>${m.requests}</td><td>${m.prompt_tokens}</td><td>${m.completion_tokens}</td><td class="mono">$${m.cost_usd.toFixed(4)}</td></tr>`).join("")||'<tr><td class="muted" colspan="5">No spend yet.</td></tr>';refreshStats()}
+function upt(s){if(s<60)return s+"s";if(s<3600)return Math.floor(s/60)+"m";if(s<86400)return Math.floor(s/3600)+"h";return Math.floor(s/86400)+"d"}
+function stat(label,val){return `<div><div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em">${label}</div><div style="font-weight:600;margin-top:2px">${val}</div></div>`}
+async function refreshStats(){const s=await(await api("/admin/stats")).json();
+  const cache=s.cache.enabled?`${s.cache.hits} hits · ${s.cache.size} entries · ${s.cache.ttl_s}s`:"off";
+  document.getElementById("statstrip").innerHTML=stat("Version","v"+s.version)+stat("Uptime",upt(s.uptime_s))+stat("Requests",s.requests)+stat("Spend","$"+(s.cost_usd||0).toFixed(4))+stat("Cache",cache)+stat("Tokens",s.tokens.active+" active")+stat("Credentials",s.credentials)+stat("Backend",s.backend+(s.encryption?" 🔒":""))}
 async function exportLogs(){const r=await api("/admin/logs/export");const blob=await r.blob();const u=URL.createObjectURL(blob);const a=document.createElement("a");a.href=u;a.download="proxyagent-audit.csv";a.click();URL.revokeObjectURL(u)}
 async function trimLogs(){if(!confirm("Delete call traces older than 30 days?"))return;const d=await(await api("/admin/logs/trim?days=30",{method:"POST"})).json();alert(`Trimmed ${d.deleted} trace(s).`);refreshLogs()}
 
