@@ -330,6 +330,34 @@ def test_oauth_refresh_helpers():
     assert c["secret"] == "new-tok" and (c["meta"] or {}).get("expires_ms") == 999999999999
 
 
+def test_credential_toggle_active():
+    c = _client()
+    cid = c.post("/admin/providers", headers=ADMIN,
+                 json={"provider": "anthropic", "secret": "sk-x", "label": "p"}).json()["id"]
+    store = c.app.state.store
+    assert len(store.get_credentials("anthropic")) == 1   # active → in the pool
+    # disable → drops out of the active pool, but still listed (for re-enable)
+    r = c.post(f"/admin/providers/{cid}/toggle", headers=ADMIN).json()
+    assert r["active"] is False
+    assert store.get_credentials("anthropic") == []
+    cat = c.get("/admin/catalog", headers=ADMIN).json()["providers"]
+    anth = next(p for p in cat if p["name"] == "anthropic")
+    assert anth["via_store"] is False and any(cc["active"] is False for cc in anth["creds"])
+    # re-enable → back in the pool
+    assert c.post(f"/admin/providers/{cid}/toggle", headers=ADMIN).json()["active"] is True
+    assert len(store.get_credentials("anthropic")) == 1
+    assert c.post(f"/admin/providers/{cid}/toggle").status_code == 401
+    assert c.post("/admin/providers/key_nope/toggle", headers=ADMIN).status_code == 404
+
+
+def test_healthz_version_uptime():
+    import proxyagent
+    c = _client()
+    h = c.get("/healthz").json()
+    assert h["ok"] is True and h["version"] == proxyagent.__version__
+    assert isinstance(h["uptime_s"], int) and h["uptime_s"] >= 0
+
+
 def test_usage_by_model_breakdown():
     c = _client()
     tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]

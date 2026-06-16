@@ -50,6 +50,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app = FastAPI(title="proxyagent", version="0.1.0")
     app.state.store = store
     app.state.tools = tools
+    started_at = time.time()
 
     # Audit-log retention — trim call traces older than PROXYAGENT_LOG_RETENTION_DAYS
     # on startup so an always-on proxy never grows the log table without bound.
@@ -344,6 +345,18 @@ def create_app(config: Config | None = None) -> FastAPI:
             raise HTTPException(404, "no such credential")
         return {"ok": True}
 
+    @app.post("/admin/providers/{cid}/toggle")
+    async def toggle_provider(cid: str, authorization: str | None = Header(None),
+                              x_admin_token: str | None = Header(None)):
+        """Enable/disable a stored credential (pause it without deleting)."""
+        require_admin(authorization, x_admin_token)
+        cred = store.get_credential_by_id(cid)
+        if not cred:
+            raise HTTPException(404, "no such credential")
+        new_active = not bool(cred["active"])
+        store.set_credential_active(cid, new_active)
+        return {"id": cid, "active": new_active}
+
     @app.post("/admin/providers/{cid}/test")
     async def test_provider(cid: str, authorization: str | None = Header(None),
                             x_admin_token: str | None = Header(None)):
@@ -388,9 +401,8 @@ def create_app(config: Config | None = None) -> FastAPI:
                       x_admin_token: str | None = Header(None)):
         require_admin(authorization, x_admin_token)
         pool: dict[str, list] = {}
-        for c in store.list_credentials():
-            if c["active"]:
-                pool.setdefault(c["provider"], []).append(c)
+        for c in store.list_credentials():   # include disabled creds so they can be re-enabled
+            pool.setdefault(c["provider"], []).append(c)
         out = []
         for name, prov in PROVIDERS.items():
             meta = CATALOG.get(name, {})
@@ -399,9 +411,9 @@ def create_app(config: Config | None = None) -> FastAPI:
                 "name": name, "label": meta.get("label", name.title()),
                 "kinds": meta.get("kinds", ["api_key"]), "color": meta.get("color", "#888"),
                 "models": meta.get("models", []), "shape": prov.shape,
-                "via_env": bool(prov.key), "via_store": bool(creds),
+                "via_env": bool(prov.key), "via_store": any(c["active"] for c in creds),
                 "creds": [{"id": c["id"], "kind": c["kind"], "masked": c.get("masked"),
-                           "label": c.get("label")} for c in creds],
+                           "label": c.get("label"), "active": bool(c["active"])} for c in creds],
                 "endpoint": prov.endpoint,
             })
         return {"providers": out, "encryption": crypto.encryption_available()}
@@ -423,7 +435,9 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     @app.get("/healthz")
     async def healthz():
-        return {"ok": True, "providers": _configured(), "available": sorted(PROVIDERS),
+        from . import __version__
+        return {"ok": True, "version": __version__, "uptime_s": round(time.time() - started_at),
+                "providers": _configured(), "available": sorted(PROVIDERS),
                 "tools": tools.names(), "backend": store.backend,
                 "aliases": len(aliases.get_map())}
 

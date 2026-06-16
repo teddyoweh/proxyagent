@@ -213,6 +213,23 @@ def provider_rm(cred_id: str, proxy: str = typer.Option("http://127.0.0.1:8080",
     console.print(f"[green]✓[/green] removed {cred_id}")
 
 
+@provider_app.command("test")
+def provider_test(cred_id: str, proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
+                  admin: str = typer.Option(None, "--admin")):
+    """Ping a stored credential's upstream and report ok / auth-failed / unreachable."""
+    with _admin_client(proxy, admin) as c:
+        r = c.post(f"/admin/providers/{cred_id}/test")
+    if r.status_code >= 400:
+        err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
+    d = r.json()
+    if d.get("ok"):
+        console.print(f"[green]✓[/green] {cred_id} · [green]ok[/green] ({d.get('latency_ms')}ms) · {d.get('detail')}")
+    elif d.get("reachable"):
+        console.print(f"[yellow]●[/yellow] {cred_id} · reachable, [yellow]{d.get('status')}[/yellow] · {d.get('detail')}")
+    else:
+        console.print(f"[red]✗[/red] {cred_id} · [red]unreachable[/red] · {d.get('detail')}")
+
+
 @token_app.command("new")
 def token_new(
     label: str = typer.Argument("machine"),

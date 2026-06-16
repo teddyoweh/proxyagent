@@ -72,9 +72,10 @@ claude -p "ship it"
 
 - **Access keys** — the credentials you create. Each is a provider + an auth type
   (Anthropic · API key, Anthropic · Bedrock, OpenAI · Azure, …); pick the type, enter the
-  key/fields, done. Listed with provider logo · auth type · masked key · **test** · remove.
-  **Test** pings the real upstream with that one credential and shows ok / auth-failed /
-  unreachable — so you catch a bad key the moment you add it.
+  key/fields, done. Listed with provider logo · auth type · masked key · **test** · **disable** ·
+  remove. **Test** pings the real upstream and shows ok / auth-failed / unreachable — catch a
+  bad key the moment you add it. **Disable** pauses a credential (it drops out of the failover
+  pool) without deleting it, so you can re-enable later.
 - **Machine tokens** — mint (scoped / TTL / budget), list, revoke.
 - **Model routing** — add/remove model remaps (e.g. `* → mock` for offline).
 - **Activity** — **spend-by-token** breakdown (requests · tokens · cost · budget %), a live
@@ -115,6 +116,7 @@ proxyagent provider add anthropic --key sk-ant-…          # stored, encrypted
 proxyagent provider add openai --key sk-…  --kind api_key
 # OAuth: store an access token (+ refresh_token/token_url in meta → auto-refreshed before expiry)
 proxyagent provider ls
+proxyagent provider test <cred-id>     # ping the upstream: ok / auth-failed / unreachable
 
 # Postgres-backed (shared, multi-instance): tables proxy_agent_keys / _tokens / _calls
 export PROXYAGENT_DATABASE_URL=postgresql://user:pass@host/db    # pip install 'proxyagent[postgres]'

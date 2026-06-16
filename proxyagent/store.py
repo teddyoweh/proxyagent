@@ -173,6 +173,13 @@ class Store:
         cur = self.db.execute("DELETE FROM proxy_agent_keys WHERE id=?", (cid,))
         return cur.rowcount > 0
 
+    def set_credential_active(self, cid, active: bool) -> bool:
+        """Enable/disable a credential without deleting it — disabled creds are skipped by
+        the forwarder (they fall out of the active pool) but kept for later re-enable."""
+        cur = self.db.execute("UPDATE proxy_agent_keys SET active=? WHERE id=?",
+                              (1 if active else 0, cid))
+        return cur.rowcount > 0
+
     def refresh_credential(self, cid, new_secret, *, expires_ms=None):
         """Persist a refreshed access token (+ new expiry in meta) for an OAuth cred."""
         r = self.db.fetchone("SELECT meta_json FROM proxy_agent_keys WHERE id=?", (cid,))
