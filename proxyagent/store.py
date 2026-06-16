@@ -81,6 +81,14 @@ class Store:
             "SELECT COUNT(*) c FROM proxy_agent_calls WHERE token_id=?", (token_id,))
         return int((r or {}).get("c", 0) or 0)
 
+    def token_last_error(self, token_id: str):
+        """The most recent errored call for a token (or None) — surfaced so operators can
+        see why a token's requests are failing without digging through the logs."""
+        r = self.db.fetchone(
+            "SELECT error, status, ts_ms FROM proxy_agent_calls "
+            "WHERE token_id=? AND error IS NOT NULL ORDER BY ts_ms DESC LIMIT 1", (token_id,))
+        return dict(r) if r else None
+
     def token_spend(self, token_id: str) -> float:
         r = self.db.fetchone(
             "SELECT COALESCE(SUM(cost_usd),0) s FROM proxy_agent_calls WHERE token_id=?", (token_id,))

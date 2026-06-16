@@ -372,7 +372,7 @@ def create_app(config: Config | None = None) -> FastAPI:
                         "spent_usd": round(store.token_spend(t["id"]), 6),
                         "requests": store.token_request_count(t["id"]),
                         "allowed_ips": _json.loads(t["allowed_ips"]) if t.get("allowed_ips") else None,
-                        "note": t.get("note")})
+                        "note": t.get("note"), "last_error": store.token_last_error(t["id"])})
         if q:
             ql = q.lower()
             out = [t for t in out if ql in (t["label"] or "").lower() or ql in t["id"].lower()
@@ -703,14 +703,19 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     @app.get("/readyz")
     async def readyz():
-        """Readiness probe — pings the backing store. 503 if the DB is unreachable, so a
-        load balancer / k8s readiness check can pull a broken instance out of rotation."""
+        """Readiness probe — pings the backing store (503 if unreachable). With
+        PROXYAGENT_REQUIRE_PROVIDER=1 it also fails readiness until at least one provider
+        is configured, so a fresh/misconfigured instance stays out of rotation."""
         try:
             store.ping()
         except Exception as e:  # noqa: BLE001
             return JSONResponse({"ready": False, "backend": store.backend, "error": str(e)[:200]},
                                 status_code=503)
-        return {"ready": True, "backend": store.backend}
+        provs = _configured()
+        if os.environ.get("PROXYAGENT_REQUIRE_PROVIDER") in ("1", "true", "yes") and not provs:
+            return JSONResponse({"ready": False, "backend": store.backend,
+                                 "error": "no provider configured"}, status_code=503)
+        return {"ready": True, "backend": store.backend, "providers": provs}
 
     @app.get("/metrics", response_class=PlainTextResponse)
     async def metrics(authorization: str | None = Header(None),

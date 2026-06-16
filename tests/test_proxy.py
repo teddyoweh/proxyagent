@@ -841,6 +841,34 @@ def test_credential_label_stored():
     assert any(k["label"] == "prod-pool" for k in creds)
 
 
+def test_readyz_require_provider(monkeypatch):
+    monkeypatch.setenv("PROXYAGENT_REQUIRE_PROVIDER", "1")
+    c = _client()
+    # no provider configured → not ready
+    r = c.get("/readyz")
+    assert r.status_code == 503 and "no provider" in r.json()["error"]
+    # add a credential → ready
+    c.post("/admin/providers", headers=ADMIN, json={"provider": "anthropic", "secret": "sk-x"})
+    r2 = c.get("/readyz")
+    assert r2.status_code == 200 and r2.json()["ready"] is True and "anthropic" in r2.json()["providers"]
+
+
+def test_token_last_error_surfaced(monkeypatch):
+    from proxyagent.store import now_ms
+    c = _client()
+    mk = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"], "label": "e"}).json()
+    store = c.app.state.store
+    store.log_request(token_id=mk["id"], provider="anthropic", model="x", status=401,
+                      error="authentication failed", ts_ms=now_ms())
+    t = next(x for x in c.get("/admin/tokens", headers=ADMIN).json()["tokens"] if x["id"] == mk["id"])
+    assert t["last_error"] and t["last_error"]["status"] == 401
+    assert "authentication failed" in t["last_error"]["error"]
+    # a token with no errors reports null
+    ok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"], "label": "ok"}).json()
+    t2 = next(x for x in c.get("/admin/tokens", headers=ADMIN).json()["tokens"] if x["id"] == ok["id"])
+    assert t2["last_error"] is None
+
+
 def test_readyz_and_ping():
     c = _client()
     r = c.get("/readyz")

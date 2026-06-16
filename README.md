@@ -158,7 +158,9 @@ A `Dockerfile` (with a `/healthz` HEALTHCHECK) and `docker-compose.yml` (proxy +
 persistent volume) ship in the repo. Bring keys via a `.env` file. Verified: container builds,
 `/healthz` green, mock call + dashboard serve. `GET /readyz` is a **readiness** probe that pings the
 backing store and returns **503** if the DB is unreachable — wire it to your load balancer / k8s
-readiness check so a broken instance is pulled from rotation.
+readiness check so a broken instance is pulled from rotation. Set `PROXYAGENT_REQUIRE_PROVIDER=1`
+to also fail readiness until at least one provider is configured (keeps a fresh/misconfigured
+instance out of rotation). Each token's most recent error is surfaced in `/admin/tokens` + the dashboard.
 
 ## Rate limits
 Per-token limits (mint with `--rate`) and **per-provider** limits protect your upstreams:
