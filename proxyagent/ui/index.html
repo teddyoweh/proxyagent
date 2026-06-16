@@ -81,6 +81,18 @@
   h2{font-size:20px;font-weight:680;margin:0;letter-spacing:-.02em}
   section>.h h2{font-size:21px}
   .empty{text-align:center;color:var(--dim);padding:54px 20px;border-radius:var(--r);background:var(--panel);box-shadow:var(--shadow)}
+  .provgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:14px}
+  .prov{display:flex;flex-direction:column;gap:13px}
+  .prov-head{display:flex;align-items:center;gap:12px}
+  .prov-head .tile{width:42px;height:42px;border-radius:12px}
+  .prov-name{font-weight:660;font-size:15.5px;letter-spacing:-.01em}
+  .prov-sub{color:var(--dim);font-size:12px;margin-top:1px}
+  .prov-body{display:flex;flex-direction:column;gap:7px}
+  .prov-empty{font-size:12.5px;color:var(--dim);padding:6px 0 2px}
+  .keyrow{display:flex;align-items:center;gap:9px;background:var(--panel2);border-radius:10px;padding:9px 11px;font-size:12.5px}
+  .keyrow.off{opacity:.55}
+  .prov-foot{display:flex;gap:8px;margin-top:2px}
+  .dot{width:7px;height:7px;border-radius:50%;flex:none;display:inline-block}.dot.on{background:var(--grn)}.dot.off{background:var(--faint)}
   .label{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);margin:13px 0 7px;font-weight:600}
   section{animation:fade .25s ease}@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
   /* create-access-key modal */
@@ -307,20 +319,31 @@ async function boot(){
     refreshKeys();refreshTokens();refreshAliases();refreshLogs();
   }catch(e){document.getElementById("gateerr").textContent="Invalid admin token."}
 }
+const HNAME={"claude-code":"Claude Code","codex":"Codex"};
 async function refreshKeys(){
   const d=await(await api("/admin/catalog")).json();CATALOG=d.providers;
-  const keys=[];d.providers.forEach(p=>{(p.creds||[]).forEach(c=>keys.push({...c,provider:p.name,plabel:p.label,color:p.color}));if(p.via_env)keys.push({provider:p.name,plabel:p.label,color:p.color,kind:"api_key",masked:"env",id:null})});
-  document.getElementById("s_keys").textContent=keys.length;
-  document.getElementById("keylist").innerHTML=keys.length
-    ?`<div class="card"><table><thead><tr><th></th><th>Provider</th><th>Name</th><th>Auth type</th><th>Key</th><th>Status</th><th></th></tr></thead><tbody>${keys.map(k=>`<tr style="${k.active===false?'opacity:.5':''}"><td style="width:50px">${logo(k.provider,k.color)}</td><td>${k.plabel}</td><td>${k.label||'<span class="muted" style="font-size:11px">—</span>'}</td><td><span class="badge on">${k.kind}</span>${k.active===false?' <span class="pill no">disabled</span>':''}</td><td class="mono">${k.masked||""}</td><td id="st_${k.id||'env'}"><span class="muted" style="font-size:11px">—</span></td><td>${k.id?`<button class="ghost sm" onclick="testKey('${k.id}')">test</button> <button class="ghost sm" onclick="toggleKey('${k.id}')">${k.active===false?'enable':'disable'}</button> <button class="danger sm" onclick="disconnect('${k.id}')">remove</button>`:'<span class="muted" style="font-size:11px">from env</span>'}</td></tr>`).join("")}</tbody></table></div>`
-    :`<div class="card empty">No access keys yet.<br/><span style="font-size:12.5px">Click <b style="color:var(--txt)">+ Create access key</b> to add one.</span></div>`;
+  let total=0;
+  const cards=d.providers.map(p=>{
+    const creds=p.creds||[];total+=creds.length+(p.via_env?1:0);
+    const live=creds.some(c=>c.active)||p.via_env;
+    const status=live
+      ?`<span class="pill ok"><span class="dot on"></span> Connected</span>`
+      :`<span class="pill" style="background:var(--soft);color:var(--dim)"><span class="dot off"></span> Not connected</span>`;
+    const rows=creds.map(c=>`<div class="keyrow ${c.active===false?'off':''}"><span class="badge on">${c.kind}</span><span class="mono" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${c.masked||""}</span>${c.label?`<span class="muted">${c.label}</span>`:""}<span id="st_${c.id}" class="muted" style="font-size:11px"></span><button class="ghost sm" onclick="testKey('${c.id}')">test</button><button class="ghost sm" onclick="toggleKey('${c.id}')">${c.active===false?'enable':'disable'}</button><button class="danger sm" onclick="disconnect('${c.id}')">remove</button></div>`).join("");
+    const body=creds.length?rows:`<div class="prov-empty">No key connected yet — add one to route ${HNAME[p.harness]||"the agent"} through the proxy.</div>`;
+    const envline=p.via_env?`<div class="muted" style="font-size:12px">✓ also configured via environment variable</div>`:"";
+    return `<div class="card prov"><div class="prov-head">${logo(p.name,p.color)}<div style="flex:1"><div class="prov-name">${p.label}</div><div class="prov-sub">Powers ${HNAME[p.harness]||"agents"} · ${(p.kinds||[]).join(" / ")}</div></div>${status}</div><div class="prov-body">${body}${envline}</div><div class="prov-foot"><button class="sm" onclick="openCreate('${p.name}')">+ Add ${p.label} key</button></div></div>`;
+  }).join("");
+  document.getElementById("s_keys").textContent=total;
+  document.getElementById("keylist").innerHTML=`<div class="provgrid">${cards}</div>`;
 }
 // create flow (modal)
-function openCreate(){
+function openCreate(name){
   if(!CATALOG.length)return;
   document.getElementById("provpick").innerHTML=CATALOG.map(p=>`<div class="ppick" data-p="${p.name}" onclick="pickProvider('${p.name}')">${logo(p.name,p.color)}<span>${p.label}</span></div>`).join("");
   document.getElementById("modal").classList.remove("hide");
-  pickProvider(CATALOG[0].name);
+  const pick=(typeof name==="string"&&CATALOG.find(x=>x.name===name))?name:CATALOG[0].name;
+  pickProvider(pick);
 }
 function closeCreate(){document.getElementById("modal").classList.add("hide")}
 function pickProvider(name){cfProvider=name;
