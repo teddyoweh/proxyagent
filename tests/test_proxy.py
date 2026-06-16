@@ -92,6 +92,15 @@ def test_cors_preflight_and_headers(monkeypatch):
     assert "x-proxyagent-request-id" in r.headers.get("access-control-expose-headers", "")
 
 
+def test_gzip_middleware_installed():
+    c = _client()
+    assert any("GZip" in str(m.cls) for m in c.app.user_middleware)
+    # a large response is still correct end-to-end with gzip negotiation
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    r = c.get("/v1/models", headers={"x-api-key": tok, "accept-encoding": "gzip"})
+    assert r.status_code == 200 and len(r.json()["data"]) > 1
+
+
 def test_cors_off_by_default():
     c = _client()
     r = c.get("/healthz", headers={"Origin": "https://evil.example.com"})

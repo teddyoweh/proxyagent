@@ -6,6 +6,8 @@
 <title>proxyagent</title>
 <style>
   :root{--bg:#08090b;--panel:#16181d;--panel2:#1e2127;--soft:#22262e;--side:#101216;--txt:#eef0f3;--dim:#888e98;--grn:#34d39e;--red:#f6788a}
+  body.light{--bg:#f6f7f9;--panel:#ffffff;--panel2:#f0f2f5;--soft:#e9ecf1;--side:#eef0f3;--txt:#16181d;--dim:#6b7280;--grn:#0e9f6e;--red:#e02d4b}
+  body.light .navitem:hover{background:#e9ecf1}
   *{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto;-webkit-font-smoothing:antialiased}
   code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
   a{color:inherit;text-decoration:none}
@@ -76,6 +78,7 @@
     <div class="side-foot">
       <div><span id="badge_backend" class="badge"></span></div>
       <div id="enc"></div>
+      <button class="ghost sm" onclick="toggleTheme()" style="width:100%" id="themebtn">◑ Theme</button>
       <button class="ghost sm" onclick="logout()" style="width:100%">Sign out</button>
     </div>
   </aside>
@@ -170,6 +173,9 @@ const A=()=>localStorage.getItem("pa_admin");
 const H=()=>({"x-admin-token":A(),"content-type":"application/json"});
 async function api(p,o={}){const r=await fetch(p,{...o,headers:{...H(),...(o.headers||{})}});if(r.status===401){logout();throw new Error("401")}return r}
 function val(id){const e=document.getElementById(id);return e?e.value.trim():""}
+function applyTheme(t){document.body.classList.toggle("light",t==="light");const b=document.getElementById("themebtn");if(b)b.textContent=t==="light"?"◐ Light":"◑ Dark"}
+function toggleTheme(){const t=document.body.classList.contains("light")?"dark":"light";localStorage.setItem("pa_theme",t);applyTheme(t)}
+applyTheme(localStorage.getItem("pa_theme")||"dark");
 function rel(ms){if(!ms)return"never";const s=Math.max(0,(Date.now()-ms)/1000);if(s<60)return"just now";if(s<3600)return Math.floor(s/60)+"m ago";if(s<86400)return Math.floor(s/3600)+"h ago";return Math.floor(s/86400)+"d ago"}
 function ttl(ms){if(!ms)return"never";const s=(ms-Date.now())/1000;if(s<=0)return"expired";if(s<60)return"in "+Math.floor(s)+"s";if(s<3600)return"in "+Math.floor(s/60)+"m";if(s<86400)return"in "+Math.floor(s/3600)+"h";return"in "+Math.floor(s/86400)+"d"}
 function saveAdmin(){const v=document.getElementById("admintok").value.trim();if(v){localStorage.setItem("pa_admin",v);boot()}}

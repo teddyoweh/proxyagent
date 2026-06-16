@@ -196,7 +196,9 @@ exhausted it returns a **clean `504`** (upstream timeout) or `502` (connection e
 descriptive body — never a raw 500. Tune the upstream timeout with `PROXYAGENT_REQUEST_TIMEOUT`.
 Cap request size with `PROXYAGENT_MAX_BODY_BYTES` (over → `413`; 0 = unlimited). The dashboard's
 **Test all** button (and `Admin.test_all_credentials()`) health-sweeps every stored credential
-concurrently and reports ok / auth-failed / unreachable per credential.
+concurrently and reports ok / auth-failed / unreachable per credential. Responses are **gzip**-
+compressed when the client accepts it (e.g. model lists / audit logs shrink ~75%), and the
+dashboard has a **light/dark theme** toggle (persisted).
 
 ## Browser clients (CORS)
 Off by default. Set `PROXYAGENT_CORS_ORIGINS` to a comma-separated allowlist (or `*`) and the

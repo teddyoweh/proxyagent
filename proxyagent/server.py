@@ -59,6 +59,10 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.state.tools = tools
     started_at = time.time()
 
+    # gzip large responses (audit logs, model lists, the dashboard) when the client accepts it.
+    from starlette.middleware.gzip import GZipMiddleware
+    app.add_middleware(GZipMiddleware, minimum_size=500)
+
     # Optional CORS — so browser-based agents/dashboards can call the proxy. Off unless
     # PROXYAGENT_CORS_ORIGINS is set (comma-separated origins, or "*"). Handles OPTIONS preflight.
     _cors = os.environ.get("PROXYAGENT_CORS_ORIGINS")
