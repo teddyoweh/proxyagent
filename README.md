@@ -229,23 +229,24 @@ export PROXYAGENT_CORS_ORIGINS="https://app.you.com,https://staging.you.com"
   bodies passed through a **secret redactor** (api keys, bearer tokens, AWS/Google keys, emails) before they touch the audit log.
 - Admin API + dashboard gated by a separate admin token. Run it behind TLS.
 
-## SDK
+## SDK — token + prompt, it just runs
+The headline call: hand it a **token** and a **prompt**, and it runs a real agent (Claude Code
+by default) on this machine against that prompt — **no API key here**, the proxy holds the key.
 ```python
 import proxyagent
-
-# host the proxy (embed in your own service):
-app = proxyagent.create_app()              # ASGI app
-
-# mint tokens + manage the proxy programmatically:
+proxyagent.run("build a SwiftUI todo app and run the tests",
+               token="pa_…", proxy="https://proxy.you.com")
+# harness="codex" for Codex, command="my-agent {goal}" for any custom agent.
+# token also reads PROXYAGENT_TOKEN; proxy reads PROXYAGENT_PROXY.
+```
+Just want model access (not a full agent)? Point any OpenAI/Anthropic client at the proxy with
+the `pa_` token as the key. And you can host/manage the proxy programmatically:
+```python
+import proxyagent
+app   = proxyagent.create_app()            # ASGI app — embed in your own service
 admin = proxyagent.Admin("https://proxy.you.com", "pa_admin_…")
 token = admin.mint("ci-runner", scope=["anthropic:claude-*"], ttl_seconds=3600)
-admin.usage_by_token()                     # per-token spend breakdown
-admin.test_credential(cred_id)             # ping a stored credential's upstream
-csv = admin.export_logs(); admin.trim_logs(days=30)   # audit trail: export + retention
-
-# run a harness on this machine, no key here:
-proxyagent.run("claude-code", goal="build the app",
-               proxy="https://proxy.you.com", token=token)
+admin.usage_by_token(); admin.test_credential(cred_id); admin.export_logs()
 ```
 
 ## Harnesses & auth modes

@@ -98,27 +98,32 @@ proxyagent provider add openai    --key sk-…
 <span class="cm"># → pa_… (shown once)</span></code></pre>
     <p>Or mint from the dashboard's <strong>Machine tokens</strong> tab (it shows a ready-to-run curl and a copy-<code>.env</code> snippet).</p>
 
-    <h2 id="run">5 · Run an agent — no real key on the machine</h2>
-    <h3>Claude Code (Anthropic)</h3>
-    <pre><code>export ANTHROPIC_BASE_URL=__ORIGIN__/anthropic
-export ANTHROPIC_API_KEY=pa_…        <span class="cm"># the machine token, NOT the real key</span>
-claude -p "ship it"</code></pre>
-    <h3>Codex (OpenAI)</h3>
-    <pre><code>export OPENAI_BASE_URL=__ORIGIN__/openai
-export OPENAI_API_KEY=pa_…
-codex "fix the failing tests"</code></pre>
-    <h3>Built-in runner</h3>
+    <h2 id="run">5 · Run an agent — token + prompt, that's it</h2>
+    <p>This is the whole point: hand the SDK a <strong>token</strong> and a <strong>prompt</strong>, and it runs a
+    real coding agent (Claude Code by default) on this machine against that prompt — with <strong>no API key
+    here</strong>. The agent's model calls route through the proxy, which holds the real key.</p>
+    <pre><code><span class="cm"># pip install proxyagent — then:</span>
+import proxyagent
+proxyagent.run("build a SwiftUI todo app and run the tests",
+               token="pa_…", proxy="__ORIGIN__")
+<span class="cm"># → launches Claude Code here, keyless. harness="codex" for Codex,</span>
+<span class="cm">#   command="my-agent {goal}" for any custom agent.</span></code></pre>
+    <h3>From the CLI</h3>
     <pre><code>PROXYAGENT_TOKEN=pa_… proxyagent run claude-code \
   --goal "build a SwiftUI todo app" --proxy __ORIGIN__</code></pre>
+    <h3>Or just set the env and run the harness yourself</h3>
+    <pre><code>export ANTHROPIC_BASE_URL=__ORIGIN__/anthropic
+export ANTHROPIC_API_KEY=pa_…        <span class="cm"># the machine token, NOT the real key</span>
+claude -p "ship it"
+<span class="cm"># Codex: export OPENAI_BASE_URL=__ORIGIN__/openai ; OPENAI_API_KEY=pa_…</span></code></pre>
 
-    <h2 id="sdk">Python SDK</h2>
-    <pre><code><span class="cm"># point the official OpenAI client at the proxy:</span>
-from openai import OpenAI
-client = OpenAI(base_url="__ORIGIN__/openai/v1", api_key="pa_…")
-client.chat.completions.create(model="gpt-4o",
-    messages=[{"role":"user","content":"hi"}])
+    <h2 id="sdk">SDK — use just a model, or manage the proxy</h2>
+    <p>If you only want model access (not a full agent), point any OpenAI/Anthropic client at the proxy:</p>
+    <pre><code>from openai import OpenAI
+client = OpenAI(base_url="__ORIGIN__/openai/v1", api_key="pa_…")   <span class="cm"># pa_ token, not a real key</span>
+client.chat.completions.create(model="gpt-4o", messages=[{"role":"user","content":"hi"}])
 
-<span class="cm"># host the proxy or manage it programmatically:</span>
+<span class="cm"># host the proxy / manage it programmatically:</span>
 import proxyagent
 app   = proxyagent.create_app()                     <span class="cm"># ASGI app</span>
 admin = proxyagent.Admin("__ORIGIN__", "pa_admin_…")

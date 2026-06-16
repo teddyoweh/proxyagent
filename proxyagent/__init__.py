@@ -5,19 +5,41 @@ key on the machine. A secure, self-hosted proxy for models *and* tools.
     import proxyagent
     proxyagent.serve()                       # or: $ proxyagent serve
 
-    # on any remote machine (holds only a throwaway token):
-    proxyagent.run("claude-code", goal="build the app",
-                   proxy="https://proxy.you.com", token="pa_…")
+    # on any remote machine (holds only a throwaway token) — token + prompt, it just runs:
+    import proxyagent
+    proxyagent.run("build the app", token="pa_…", proxy="https://proxy.you.com")
 """
 
 from __future__ import annotations
 
+import os
 from typing import Optional
 
-from .harness import run  # noqa: F401  (the headline SDK call)
-
-__version__ = "0.47.0"
+__version__ = "0.48.0"
 __all__ = ["run", "serve", "create_app", "Config", "Admin", "__version__"]
+
+
+def run(goal: str, *, harness: str = "claude-code", token: Optional[str] = None,
+        proxy: Optional[str] = None, command: Optional[str] = None,
+        cwd: Optional[str] = None, extra_env: Optional[dict] = None) -> int:
+    """Run a real agent on THIS machine against `goal` — with no API key here, just the
+    proxy token. The headline SDK call:
+
+        import proxyagent
+        proxyagent.run("build a SwiftUI todo app",
+                       token="pa_…", proxy="https://proxy.you.com")
+
+    Launches Claude Code (default; or harness="codex", or any command="my-agent {goal}")
+    with its *_BASE_URL pointed at the proxy and the machine token as its key. The real
+    provider key never touches this machine. Returns the process exit code.
+    """
+    from .harness import run as _run_harness
+    token = token or os.environ.get("PROXYAGENT_TOKEN")
+    if not token:
+        raise ValueError("proxyagent.run needs a machine token (token='pa_…' or PROXYAGENT_TOKEN env)")
+    proxy = proxy or os.environ.get("PROXYAGENT_PROXY") or "http://127.0.0.1:8080"
+    return _run_harness(harness, goal, proxy_url=proxy, token=token,
+                        command=command, cwd=cwd, extra_env=extra_env)
 
 
 def create_app(config=None):

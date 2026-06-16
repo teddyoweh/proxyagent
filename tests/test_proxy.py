@@ -191,6 +191,43 @@ def test_ui_hide_class_wins():
     assert ".hide{display:none!important}" in html
 
 
+def test_sdk_run_agent_keyless(monkeypatch):
+    """proxyagent.run(prompt, token=…) launches the harness here with *_BASE_URL pointed at
+    the proxy and the token as the key — and NO real key on the machine."""
+    import proxyagent
+    import proxyagent.harness as H
+    captured = {}
+
+    class _Proc:
+        returncode = 0
+
+    def _fake_run(argv, cwd=None, env=None):
+        captured["argv"] = argv
+        captured["env"] = env
+        return _Proc()
+
+    monkeypatch.setattr(H.subprocess, "run", _fake_run)
+    # token + prompt is all you need
+    code = proxyagent.run("build the app", harness="codex", token="pa_machine",
+                          proxy="https://proxy.you.com")
+    assert code == 0
+    assert captured["argv"] == ["codex", "exec", "build the app"]
+    env = captured["env"]
+    assert env["OPENAI_BASE_URL"] == "https://proxy.you.com/openai/v1"
+    assert env["ANTHROPIC_BASE_URL"] == "https://proxy.you.com/anthropic"
+    assert env["OPENAI_API_KEY"] == "pa_machine" and env["ANTHROPIC_API_KEY"] == "pa_machine"
+    # no real provider key leaked into the agent's environment
+    assert "sk-ant" not in str(env.values()) and env.get("OPENAI_API_KEY", "").startswith("pa_")
+    # token can come from PROXYAGENT_TOKEN; missing token is a clear error
+    monkeypatch.setenv("PROXYAGENT_TOKEN", "pa_env")
+    proxyagent.run("hi", harness="codex", proxy="http://p")
+    assert captured["env"]["OPENAI_API_KEY"] == "pa_env"
+    monkeypatch.delenv("PROXYAGENT_TOKEN", raising=False)
+    import pytest as _pt
+    with _pt.raises(ValueError):
+        proxyagent.run("hi", harness="codex")
+
+
 def test_docs_page():
     c = _client()
     r = c.get("/docs")
