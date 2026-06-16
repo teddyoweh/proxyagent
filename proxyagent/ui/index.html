@@ -140,6 +140,8 @@
     <div class="chips" id="kindpick"></div>
     <input type="hidden" id="kind_cf"/>
     <div id="ff_cf" style="margin-top:12px"></div>
+    <div class="label">Name <span style="text-transform:none;letter-spacing:0;color:var(--dim)">(optional)</span></div>
+    <input id="kl_cf" placeholder="e.g. prod-pool, billing-account, eu-region"/>
     <div class="row" style="margin-top:18px"><button onclick="createKey()">Create access key</button><button class="ghost" onclick="closeCreate()">Cancel</button></div>
   </div>
 </div>
@@ -180,7 +182,8 @@ async function submitCred(uid,provider){
   else if(kind==="vertex"){secret=g("f1_"+uid);meta={region:g("f3_"+uid)||"us-east5"}}
   else{secret=g("f1_"+uid)}
   if(!secret)return false;
-  await api("/admin/providers",{method:"POST",body:JSON.stringify({provider,secret,kind,meta})});refreshKeys();return true;
+  const label=g("kl_"+uid)||null;
+  await api("/admin/providers",{method:"POST",body:JSON.stringify({provider,secret,kind,meta,label})});refreshKeys();return true;
 }
 async function disconnect(id){await api("/admin/providers/"+id,{method:"DELETE"});refreshKeys()}
 async function testKey(id){const el=document.getElementById("st_"+id);if(el)el.innerHTML='<span class="muted" style="font-size:11px">testing…</span>';
@@ -207,7 +210,7 @@ async function refreshKeys(){
   const keys=[];d.providers.forEach(p=>{(p.creds||[]).forEach(c=>keys.push({...c,provider:p.name,plabel:p.label,color:p.color}));if(p.via_env)keys.push({provider:p.name,plabel:p.label,color:p.color,kind:"api_key",masked:"env",id:null})});
   document.getElementById("s_keys").textContent=keys.length;
   document.getElementById("keylist").innerHTML=keys.length
-    ?`<div class="card"><table><thead><tr><th></th><th>Provider</th><th>Auth type</th><th>Key</th><th>Status</th><th></th></tr></thead><tbody>${keys.map(k=>`<tr><td style="width:50px">${logo(k.provider,k.color)}</td><td>${k.plabel}</td><td><span class="badge on">${k.kind}</span></td><td class="mono">${k.masked||""}</td><td id="st_${k.id||'env'}"><span class="muted" style="font-size:11px">—</span></td><td>${k.id?`<button class="ghost sm" onclick="testKey('${k.id}')">test</button> <button class="danger sm" onclick="disconnect('${k.id}')">remove</button>`:'<span class="muted" style="font-size:11px">from env</span>'}</td></tr>`).join("")}</tbody></table></div>`
+    ?`<div class="card"><table><thead><tr><th></th><th>Provider</th><th>Name</th><th>Auth type</th><th>Key</th><th>Status</th><th></th></tr></thead><tbody>${keys.map(k=>`<tr><td style="width:50px">${logo(k.provider,k.color)}</td><td>${k.plabel}</td><td>${k.label||'<span class="muted" style="font-size:11px">—</span>'}</td><td><span class="badge on">${k.kind}</span></td><td class="mono">${k.masked||""}</td><td id="st_${k.id||'env'}"><span class="muted" style="font-size:11px">—</span></td><td>${k.id?`<button class="ghost sm" onclick="testKey('${k.id}')">test</button> <button class="danger sm" onclick="disconnect('${k.id}')">remove</button>`:'<span class="muted" style="font-size:11px">from env</span>'}</td></tr>`).join("")}</tbody></table></div>`
     :`<div class="card empty">No access keys yet.<br/><span style="font-size:12.5px">Click <b style="color:var(--txt)">+ Create access key</b> to add one.</span></div>`;
 }
 // create flow (modal)

@@ -229,10 +229,15 @@ proxyagent provider add anthropic --key sk-ant-bbb
 proxyagent provider add anthropic --key <oauth> --kind oauth
 ```
 
-## Per-token budgets
+## Budgets — per-token and per-provider
 Cap what any token can spend; once its summed cost crosses the cap, the proxy returns **402**.
 ```bash
 proxyagent token new ci --budget 5.00      # this token may spend at most $5
+```
+Or cap a whole **provider** — a spend ceiling across *all* tokens, so one runaway agent can't
+blow your bill no matter which token it holds:
+```bash
+export PROXYAGENT_PROVIDER_BUDGETS='{"anthropic": 200, "openai": 50}'   # $ ceilings; over → 402
 ```
 
 ## Supported providers

@@ -330,6 +330,36 @@ def test_oauth_refresh_helpers():
     assert c["secret"] == "new-tok" and (c["meta"] or {}).get("expires_ms") == 999999999999
 
 
+def test_provider_budget_402(monkeypatch):
+    """A provider-wide cost ceiling returns 402 once the provider's total spend crosses it,
+    regardless of which token calls."""
+    from proxyagent.store import now_ms
+    monkeypatch.setenv("PROXYAGENT_PROVIDER_BUDGETS", '{"anthropic": 0.001}')
+    c = _client()
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    # seed spend above the ceiling via a logged call, then the next request is blocked
+    store = c.app.state.store
+    _, trow = store.create_token("seed", ["*"])
+    store.log_request(token_id=trow["id"], provider="anthropic", model="x", status=200, cost_usd=0.01)
+    assert store.provider_spend("anthropic") >= 0.001
+    r = c.post("/anthropic/v1/messages", headers={"x-api-key": tok},
+               json={"model": "mock", "max_tokens": 5, "messages": [{"role": "user", "content": "hi"}]})
+    assert r.status_code == 402 and "budget" in r.json()["detail"]
+    # a different, un-capped provider still works
+    r2 = c.post("/openai/v1/chat/completions", headers={"x-api-key": tok},
+                json={"model": "mock", "messages": [{"role": "user", "content": "hi"}]})
+    assert r2.status_code == 200
+
+
+def test_credential_label_stored():
+    c = _client()
+    r = c.post("/admin/providers", headers=ADMIN,
+               json={"provider": "anthropic", "secret": "sk-x", "label": "prod-pool"})
+    assert r.status_code == 200
+    creds = c.get("/admin/providers", headers=ADMIN).json()["credentials"]
+    assert any(k["label"] == "prod-pool" for k in creds)
+
+
 def test_readyz_and_ping():
     c = _client()
     r = c.get("/readyz")

@@ -97,6 +97,11 @@ class Store:
             (tid, now_ms() - window_ms))
         return (r or {}).get("c", 0)
 
+    def provider_spend(self, provider: str) -> float:
+        r = self.db.fetchone(
+            "SELECT COALESCE(SUM(cost_usd),0) s FROM proxy_agent_calls WHERE provider=?", (provider,))
+        return float((r or {}).get("s", 0) or 0)
+
     def recent_provider_count(self, provider, window_ms=60_000):
         r = self.db.fetchone(
             "SELECT COUNT(*) c FROM proxy_agent_calls WHERE provider=? AND ts_ms>=?",

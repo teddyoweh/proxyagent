@@ -28,6 +28,21 @@ def provider_rate_limit(provider: str) -> int:
     except ValueError:
         return 0
 
+
+def provider_budget(provider: str) -> float:
+    """Max total $ a provider may spend (0 = unlimited). From PROXYAGENT_PROVIDER_BUDGETS
+    (JSON {provider: usd}). A provider-wide cost ceiling — once crossed the proxy returns 402,
+    protecting you from a runaway agent regardless of which token is calling."""
+    raw = os.environ.get("PROXYAGENT_PROVIDER_BUDGETS")
+    if raw:
+        try:
+            m = json.loads(raw)
+            if provider in m:
+                return float(m[provider])
+        except Exception:  # noqa: BLE001
+            pass
+    return 0.0
+
 from .security import hash_token, new_token, ADMIN_PREFIX
 
 HOME = Path(os.environ.get("PROXYAGENT_HOME", Path.home() / ".proxyagent"))

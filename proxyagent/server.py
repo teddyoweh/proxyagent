@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from . import aliases, cache, crypto
 from .config import (AUTH_LABELS, AUTH_READY, CATALOG, HARNESSES, Config, PROVIDERS,
-                     provider_rate_limit)
+                     provider_budget, provider_rate_limit)
 from .providers import forward, forward_agentic, scope_allows, test_credential
 from .security import token_matches
 from .store import Store, now_ms
@@ -117,6 +117,10 @@ def create_app(config: Config | None = None) -> FastAPI:
         rl = provider_rate_limit(provider)
         if rl and store.recent_provider_count(provider) >= rl:
             raise HTTPException(429, f"rate limit for provider '{provider}' exceeded ({rl}/min)")
+
+        pb = provider_budget(provider)
+        if pb and store.provider_spend(provider) >= pb:
+            raise HTTPException(402, f"provider '{provider}' budget of ${pb:g} exhausted")
 
         tools_on = request.headers.get("x-proxyagent-tools", "").lower() in ("1", "on", "true")
         used_tools: list[str] = []
