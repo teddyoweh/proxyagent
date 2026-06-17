@@ -1008,6 +1008,39 @@ def test_plan_for_credential_per_kind():
     assert u3 == "https://az/x" and h3["api-key"] == "k"
 
 
+def test_anthropic_oauth_plan_has_beta_and_cc_system():
+    """Anthropic OAuth tokens (sk-ant-oat01-…) only work with the oauth beta header AND a
+    Claude Code system prompt — without them Anthropic 400s a valid token. Regression."""
+    import json as _json
+    from proxyagent.providers import plan_for_credential, ANTHROPIC_OAUTH_BETA, CLAUDE_CODE_SYSTEM
+    from proxyagent.config import PROVIDERS
+    body = {"model": "claude-haiku-4-5", "max_tokens": 1, "messages": [{"role": "user", "content": "ping"}]}
+    _, hdrs, raw = plan_for_credential(PROVIDERS["anthropic"], {"kind": "oauth", "secret": "sk-ant-oat01-x"}, body)
+    assert hdrs["Authorization"] == "Bearer sk-ant-oat01-x"
+    assert hdrs["anthropic-beta"] == ANTHROPIC_OAUTH_BETA
+    assert "x-api-key" not in hdrs
+    sent = _json.loads(raw)
+    assert sent["system"].startswith(CLAUDE_CODE_SYSTEM)
+    # an existing CC system prompt is left untouched (real Claude Code requests)
+    body2 = {**body, "system": CLAUDE_CODE_SYSTEM + " extra"}
+    _, _, raw2 = plan_for_credential(PROVIDERS["anthropic"], {"kind": "oauth", "secret": "t"}, body2)
+    assert _json.loads(raw2)["system"] == CLAUDE_CODE_SYSTEM + " extra"
+    # api_key keeps x-api-key (no oauth beta, no system injection)
+    _, h_api, raw_api = plan_for_credential(PROVIDERS["anthropic"], {"kind": "api_key", "secret": "sk-ant-x"}, body)
+    assert h_api["x-api-key"] == "sk-ant-x" and "anthropic-beta" not in h_api
+    assert "system" not in _json.loads(raw_api)
+
+
+def test_ping_body_has_no_anthropic_version_field():
+    """anthropic-version is a header, never a body field — Anthropic 400s on extra body inputs."""
+    from proxyagent.providers import _ping_body
+    from proxyagent.config import PROVIDERS
+    b = _ping_body(PROVIDERS["anthropic"], None)
+    assert "anthropic_version" not in b and "anthropic-version" not in b
+    # ping picks a real, cheap model id (haiku tier), not a stale alias
+    assert "haiku" in b["model"]
+
+
 def test_test_all_credentials(monkeypatch):
     import proxyagent.server as srv
 

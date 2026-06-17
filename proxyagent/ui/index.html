@@ -380,7 +380,8 @@ async function testKey(id){const el=document.getElementById("st_"+id);if(el)el.i
   try{const r=await(await api("/admin/providers/"+id+"/test",{method:"POST"})).json();
     const cls=r.ok?"ok":(r.reachable?"warn":"no");const txt=r.ok?`ok ${r.latency_ms}ms`:(r.reachable?`${r.status}`:"unreachable");
     if(el)el.innerHTML=`<span class="pill ${cls}" title="${(r.detail||'').replace(/"/g,'')}">${txt}</span>`;
-  }catch(e){if(el)el.innerHTML='<span class="pill no">error</span>'}}
+    if(r.ok)toast("Credential authenticated ✓","ok");else toast((r.detail||("test failed ("+(r.status||'unreachable')+")")),"err");
+  }catch(e){if(el)el.innerHTML='<span class="pill no">error</span>';toast("test failed","err")}}
 
 let CATALOG=[],cfProvider=null;
 async function boot(){

@@ -19,10 +19,39 @@ from .store import Store, now_ms
 
 FAILOVER_STATUS = {429, 500, 502, 503, 504, 529}
 
+# Anthropic OAuth (sk-ant-oat01-… — Claude Code / claude.ai login tokens) are NOT API
+# keys: the Messages API only accepts them when the request carries this beta header AND a
+# system prompt that begins with the Claude Code identity. Without both, Anthropic rejects a
+# perfectly valid token (400/404). Real Claude Code already sends the system prompt; the
+# proxy must add the beta header (and, for pings, the system prompt too).
+ANTHROPIC_OAUTH_BETA = "oauth-2025-04-20"
+CLAUDE_CODE_SYSTEM = "You are Claude Code, Anthropic's official CLI for Claude."
+
+
+def _ensure_cc_system(body: dict) -> dict:
+    """Return a copy of body whose system prompt begins with the Claude Code identity —
+    required for Anthropic OAuth tokens. No-op if it already does (real Claude Code requests)."""
+    sys = body.get("system")
+    if not sys:
+        return {**body, "system": CLAUDE_CODE_SYSTEM}
+    if isinstance(sys, str):
+        if sys.startswith(CLAUDE_CODE_SYSTEM):
+            return body
+        return {**body, "system": CLAUDE_CODE_SYSTEM + "\n\n" + sys}
+    if isinstance(sys, list):
+        first = sys[0].get("text", "") if sys and isinstance(sys[0], dict) else ""
+        if first.startswith(CLAUDE_CODE_SYSTEM):
+            return body
+        return {**body, "system": [{"type": "text", "text": CLAUDE_CODE_SYSTEM}, *sys]}
+    return body
+
 
 def _headers_for(provider, secret: str, kind: str) -> dict:
     if kind != "api_key":  # oauth / bearer
-        return {"Authorization": f"Bearer {secret}", **provider.extra_headers}
+        h = {"Authorization": f"Bearer {secret}", **provider.extra_headers}
+        if provider.name == "anthropic":
+            h["anthropic-beta"] = ANTHROPIC_OAUTH_BETA
+        return h
     if provider.auth_style == "x-api-key":
         return {"x-api-key": secret, **provider.extra_headers}
     return {"Authorization": f"Bearer {secret}", **provider.extra_headers}
@@ -53,9 +82,9 @@ def plan_for_credential(provider, c: dict, body: dict, *, store: Store | None = 
     api_key/oauth → the provider endpoint; azure → a custom deployment URL; bedrock →
     SigV4-signed Claude-on-Bedrock; vertex → SA-token Claude-on-Vertex. Returns None if the
     credential can't produce a plan (e.g. azure with no endpoint, malformed bedrock/vertex)."""
-    raw = json.dumps(body).encode("utf-8")
     JSON = {"content-type": "application/json"}
     kind, meta = c["kind"], (c.get("meta") or {})
+    raw = json.dumps(body).encode("utf-8")
     if kind == "api_key":
         return (provider.endpoint, {**JSON, **_headers_for(provider, c["secret"], "api_key")}, raw)
     if kind == "oauth":
@@ -72,7 +101,10 @@ def plan_for_credential(provider, c: dict, body: dict, *, store: Store | None = 
                                              expires_ms=int(time.time() * 1000) + ttl * 1000)
             except Exception:  # noqa: BLE001 — fall back to the existing token
                 pass
-        return (provider.endpoint, {**JSON, "Authorization": f"Bearer {secret}", **provider.extra_headers}, raw)
+        # Anthropic OAuth needs the Claude Code system prompt + beta header (see note above).
+        if provider.name == "anthropic":
+            raw = json.dumps(_ensure_cc_system(body)).encode("utf-8")
+        return (provider.endpoint, {**JSON, **_headers_for(provider, secret, "oauth")}, raw)
     if kind == "azure":
         ep = (meta.get("endpoint") or "").rstrip("/")
         return (ep, {**JSON, "api-key": c["secret"]}, raw) if ep else None
@@ -287,11 +319,14 @@ async def forward_agentic(config: Config, provider_name: str, body: dict, *, tok
 def _ping_body(provider, model: str | None) -> dict:
     """A minimal, cheap request to validate a credential reaches + authenticates upstream."""
     from .config import CATALOG
-    model = model or (CATALOG.get(provider.name, {}).get("models") or ["claude-3-5-haiku"])[0]
-    body = {"model": model, "max_tokens": 1, "messages": [{"role": "user", "content": "ping"}]}
-    if provider.shape == "anthropic":
-        body["anthropic_version"] = "2023-06-01"
-    return body
+    models = CATALOG.get(provider.name, {}).get("models") or []
+    # Ping with the cheapest known model (a haiku/mini/nano tier if present) — max_tokens=1
+    # keeps it trivially cheap regardless.
+    cheap = next((m for m in models if any(t in m for t in ("haiku", "mini", "nano", "flash"))), None)
+    model = model or cheap or (models[0] if models else "claude-haiku-4-5")
+    # NB: anthropic-version is a HEADER (provider.extra_headers), never a body field —
+    # Anthropic 400s on extra body inputs.
+    return {"model": model, "max_tokens": 1, "messages": [{"role": "user", "content": "ping"}]}
 
 
 async def test_credential(config, provider_name: str, cred: dict, *, model: str | None = None) -> dict:
@@ -315,8 +350,19 @@ async def test_credential(config, provider_name: str, cred: dict, *, model: str 
                 "latency_ms": now_ms() - t0, "detail": redact.redact(f"{type(e).__name__}: {e}")[:200]}
     ok = resp.is_success
     auth_fail = resp.status_code in (401, 403)
+    # Surface the upstream's own error message so a 4xx says WHY (bad model, malformed
+    # request, …) instead of an opaque status code. Redacted, never echoes the secret.
+    upstream_msg = ""
+    if not ok:
+        try:
+            err = resp.json().get("error")
+            upstream_msg = (err.get("message") if isinstance(err, dict) else str(err)) or ""
+        except Exception:  # noqa: BLE001 — non-JSON error body
+            upstream_msg = resp.text[:160]
+        upstream_msg = redact.redact(upstream_msg)[:200]
     detail = ("authenticated" if ok else
-              "authentication failed — bad credential" if auth_fail else
+              f"authentication failed — bad credential ({upstream_msg})" if auth_fail else
+              f"upstream {resp.status_code}: {upstream_msg}" if upstream_msg else
               f"reachable, upstream returned {resp.status_code}")
     return {"ok": ok, "reachable": True, "status": resp.status_code, "kind": cred.get("kind"),
             "auth_ok": not auth_fail, "latency_ms": now_ms() - t0, "detail": detail}

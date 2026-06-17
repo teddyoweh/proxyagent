@@ -101,7 +101,7 @@ PROVIDERS: dict[str, Provider] = {
 CATALOG: dict[str, dict] = {
     "anthropic":  {"label": "Anthropic",   "kinds": ["api_key", "oauth", "bedrock", "vertex"],
                    "color": "#D97757", "harness": "claude-code",
-                   "models": ["claude-opus-4", "claude-sonnet-4-5", "claude-haiku-4"]},
+                   "models": ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"]},
     "openai":     {"label": "OpenAI",       "kinds": ["api_key", "oauth", "azure"],
                    "color": "#10A37F", "harness": "codex",
                    "models": ["gpt-5", "gpt-4.1", "gpt-4o", "o3"]},
