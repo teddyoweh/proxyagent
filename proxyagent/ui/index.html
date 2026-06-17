@@ -207,18 +207,16 @@
     <section id="t_tokens" class="hide">
       <div class="h"><h2>Machine tokens</h2></div>
       <div class="card" style="margin-bottom:16px">
+        <p class="muted" style="margin:0 0 10px;font-size:12.5px">Mint a token for a machine. It just works — full access through the proxy. Optionally cap its spend.</p>
         <div class="row">
-          <input id="tk_label" placeholder="label (e.g. macbook-01)" style="flex:1"/>
-          <input id="tk_scope" placeholder="scope: * or anthropic:claude-*" style="flex:1"/>
-          <input id="tk_ttl" type="number" placeholder="ttl (s)" style="width:100px"/>
-          <input id="tk_budget" type="number" step="0.01" placeholder="budget $" style="width:100px"/>
-          <input id="tk_note" placeholder="note (optional)" style="flex:1"/>
-          <button onclick="mintToken()">Mint</button>
+          <input id="tk_label" placeholder="name this machine (e.g. macbook-01)" style="flex:1"/>
+          <input id="tk_budget" type="number" step="0.01" placeholder="spend cap $ (optional)" style="width:170px"/>
+          <button onclick="mintToken()">Mint token</button>
         </div>
         <div id="tk_out" class="tok hide"></div>
       </div>
-      <div class="row" style="margin-bottom:12px;gap:8px"><input id="tk_search" placeholder="Search tokens by label, id, or scope…" oninput="refreshTokens()" style="max-width:360px"/><button class="ghost sm" onclick="revokeExpired()">Revoke expired</button></div>
-      <div class="card" style="overflow-x:auto"><table><thead><tr><th>ID</th><th>Label</th><th>Scope</th><th>Reqs</th><th>Budget</th><th>Last used</th><th>Expires</th><th>Status</th><th></th></tr></thead><tbody id="toks"></tbody></table></div>
+      <div class="row" style="margin-bottom:12px;gap:8px"><input id="tk_search" placeholder="Search tokens by name or id…" oninput="refreshTokens()" style="max-width:360px"/><button class="ghost sm" onclick="revokeExpired()">Revoke expired</button></div>
+      <div class="card" style="overflow-x:auto"><table><thead><tr><th>ID</th><th>Machine</th><th>Reqs</th><th>Budget</th><th>Last used</th><th>Status</th><th></th></tr></thead><tbody id="toks"></tbody></table></div>
     </section>
 
     <section id="t_models" class="hide">
@@ -536,23 +534,21 @@ async function createKey(){if(await submitCred("cf",cfProvider))closeCreate()}
 
 async function refreshTokens(){const q=val("tk_search");const d=await(await api("/admin/tokens"+(q?"?q="+encodeURIComponent(q):""))).json();
   const tb=document.getElementById("toks");
-  if(!d.tokens.length){tb.innerHTML=`<tr><td colspan="9" class="muted" style="text-align:center;padding:30px 0">${q?"No tokens match that search.":"No machine tokens yet — mint one above to run an agent on a machine."}</td></tr>`;return}
+  if(!d.tokens.length){tb.innerHTML=`<tr><td colspan="7" class="muted" style="text-align:center;padding:30px 0">${q?"No tokens match that search.":"No machine tokens yet — mint one above."}</td></tr>`;return}
   tb.innerHTML=d.tokens.map(t=>{
-    const expired=t.expires_ms&&t.expires_ms<Date.now(),dead=t.revoked||expired;
-    const status=t.revoked?'<span class="pill no">revoked</span>':expired?'<span class="pill no">expired</span>':'<span class="pill ok">active</span>';
+    const dead=t.revoked;
+    const status=t.revoked?'<span class="pill no">revoked</span>':'<span class="pill ok">active</span>';
     const err=t.last_error?` <span class="pill warn" title="${(t.last_error.error||'').replace(/"/g,'')}">${t.last_error.status||'err'}</span>`:'';
-    const budget=t.budget_usd?('$'+(t.spent_usd||0).toFixed(4)+' / $'+(+t.budget_usd).toFixed(2)):'<span class="muted">—</span>';
-    const scope=(t.scope||[]).map(s=>`<span class="scopechip">${s}</span>`).join(" ")||'<span class="muted">—</span>';
-    const actions=t.revoked?'':`<div class="actions"><button class="ghost sm" title="Copy run command" onclick='runCmd(${JSON.stringify(t.scope||[])})'>cmd</button><button class="ghost sm" onclick="editTok('${t.id}')">edit</button><button class="ghost sm" onclick="cloneTok('${t.id}')">clone</button><button class="danger sm" onclick="revokeTok('${t.id}')">revoke</button></div>`;
-    return `<tr class="${dead?'rev':''}"><td class="mono" title="${t.masked||''}">${t.id}</td><td>${t.label||'<span class="muted">—</span>'}</td><td>${scope}</td><td>${t.requests??0}</td><td class="mono">${budget}</td><td class="muted" style="font-size:12px">${rel(t.last_used_ms)}</td><td class="muted" style="font-size:12px">${ttl(t.expires_ms)}</td><td>${status}${err}</td><td class="actcell">${actions}</td></tr>`;
+    const budget=t.budget_usd?('$'+(t.spent_usd||0).toFixed(4)+' / $'+(+t.budget_usd).toFixed(2)):'<span class="muted">no cap</span>';
+    const actions=t.revoked?'':`<div class="actions"><button class="ghost sm" title="Copy run command" onclick='runCmd(${JSON.stringify(t.scope||[])})'>cmd</button><button class="ghost sm" title="Set a spend cap" onclick="editTok('${t.id}')">cap</button><button class="danger sm" onclick="revokeTok('${t.id}')">revoke</button></div>`;
+    return `<tr class="${dead?'rev':''}"><td class="mono" title="${t.masked||''}">${t.id}</td><td>${t.label||'<span class="muted">—</span>'}</td><td>${t.requests??0}</td><td class="mono">${budget}</td><td class="muted" style="font-size:12px">${rel(t.last_used_ms)}</td><td>${status}${err}</td><td class="actcell">${actions}</td></tr>`;
   }).join("")}
 function runCmd(scope){const harness=(scope||[]).some(s=>String(s).startsWith("openai"))?"codex":"claude-code";
   const cmd=`PROXYAGENT_TOKEN=<paste your pa_ token> proxyagent run ${harness} --goal "ship it" --proxy ${location.origin}`;
   navigator.clipboard.writeText(cmd);toast("Run command copied — paste your token into PROXYAGENT_TOKEN");}
-async function mintToken(){const body={label:val("tk_label")||"machine",scope:(val("tk_scope")||"*").split(",").map(s=>s.trim()),ttl_seconds:parseInt(val("tk_ttl"))||null,budget_usd:parseFloat(val("tk_budget"))||null,note:val("tk_note")||null};
+async function mintToken(){const body={label:val("tk_label")||"machine",scope:["*"],budget_usd:parseFloat(val("tk_budget"))||null};
   const d=await(await api("/admin/tokens",{method:"POST",body:JSON.stringify(body)})).json();
-  const base=location.origin,tok=d.token;
-  const harness=(body.scope||[]).some(s=>String(s).startsWith("openai"))?"codex":"claude-code";
+  const base=location.origin,tok=d.token,harness="claude-code";
   const env=`ANTHROPIC_BASE_URL=${base}/anthropic\nANTHROPIC_API_KEY=${tok}\nOPENAI_BASE_URL=${base}/openai\nOPENAI_API_KEY=${tok}`;
   const py=pythonTarget(base,tok,harness);
   const demo=demoScript(base,tok,harness);
@@ -564,20 +560,14 @@ async function mintToken(){const body={label:val("tk_label")||"machine",scope:(v
     `</div></div>`+
     `<div class="label" style="margin-top:14px">Run on the machine — Python SDK</div>`+codeBlock(py,"python")+
     `<div class="label" style="margin-top:12px">Prove it now — paste &amp; run (no key on the machine)</div>`+codeBlock(demo,"bash")+
-    `<div class="row" style="gap:8px;margin-top:10px"><button class="ghost sm" onclick='navigator.clipboard.writeText(${JSON.stringify(env)});this.textContent="copied";setTimeout(()=>this.textContent="copy .env",1200)'>copy .env</button><span class="muted" style="font-size:12px">Scope <code>${(body.scope||["*"]).join(", ")}</code>${body.budget_usd?` · capped $${body.budget_usd}`:""}${body.ttl_seconds?` · expires in ${body.ttl_seconds}s`:""}</span></div>`;
-  refreshTokens()}
+    `<div class="row" style="gap:8px;margin-top:10px"><button class="ghost sm" onclick='navigator.clipboard.writeText(${JSON.stringify(env)});this.textContent="copied";setTimeout(()=>this.textContent="copy .env",1200)'>copy .env</button><span class="muted" style="font-size:12px">${body.budget_usd?`Capped at $${body.budget_usd}.`:"Full access."} Revoke anytime below.</span></div>`;
+  el.scrollIntoView({behavior:"smooth",block:"nearest"});refreshTokens();toast("Token minted — copy it now (shown once)","ok")}
 async function revokeTok(id){await api("/admin/tokens/"+id,{method:"DELETE"});refreshTokens()}
 async function revokeExpired(){const d=await(await api("/admin/tokens/revoke-expired",{method:"POST"})).json();toast(`Revoked ${d.revoked} expired token(s)`);refreshTokens()}
-async function cloneTok(id){const d=await(await api("/admin/tokens/"+id+"/clone",{method:"POST"})).json();
-  const el=document.getElementById("tk_out");el.classList.remove("hide");
-  el.innerHTML=`<div class="tokreveal"><div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px"><div style="min-width:0"><div class="label" style="margin:0">Cloned token — shown once</div><div class="tokval">${d.token}</div></div><button class="ghost sm" style="flex:none" onclick="navigator.clipboard.writeText('${d.token}');this.textContent='copied';setTimeout(()=>this.textContent='copy',1200)">copy</button></div></div>`;refreshTokens()}
 async function editTok(id){const t=(await(await api("/admin/tokens")).json()).tokens.find(x=>x.id===id);if(!t)return;
-  const scope=prompt("Scope (comma-separated globs, e.g. anthropic:claude-*):",(t.scope||[]).join(", "));if(scope===null)return;
-  const rate=prompt("Rate limit (requests/min, 0 = unlimited):",t.rate_limit||0);if(rate===null)return;
-  const budget=prompt("Budget $ (blank = unchanged):",t.budget_usd||"");if(budget===null)return;
-  const body={scope:scope.split(",").map(s=>s.trim()).filter(Boolean),rate_limit:parseInt(rate)||0};
-  if(budget!=="")body.budget_usd=parseFloat(budget);
-  await api("/admin/tokens/"+id,{method:"PATCH",body:JSON.stringify(body)});refreshTokens()}
+  const cap=prompt("Spend cap in $ (blank = no cap):",t.budget_usd||"");if(cap===null)return;
+  await api("/admin/tokens/"+id,{method:"PATCH",body:JSON.stringify({budget_usd:cap===""?0:parseFloat(cap)||0})});
+  refreshTokens();toast(cap===""?"Spend cap removed":"Spend cap set to $"+parseFloat(cap))}
 
 async function refreshAliases(){const m=(await(await api("/admin/aliases")).json()).map;
   document.getElementById("aliases").innerHTML=Object.entries(m).map(([k,v])=>`<tr><td class="mono">${k}</td><td class="mono">${v}</td><td><button class="danger sm" onclick="rmAlias('${k}')">remove</button></td></tr>`).join("")||'<tr><td class="muted" colspan="3">No model routes.</td></tr>'}
