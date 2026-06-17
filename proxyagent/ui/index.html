@@ -310,6 +310,12 @@ function refreshRun(){
 }
 function pickRun(k){runHarness=k;refreshRun()}
 function cb(id,text){return `<button class="cp" onclick='navigator.clipboard.writeText(${JSON.stringify(text)});this.textContent="copied";setTimeout(()=>this.textContent="copy",1200)'>copy</button>`}
+// A self-contained, copy-paste demo that actually runs — proves a model call goes
+// through the proxy with NO real key on the machine, using the real token.
+function demoScript(base,tok,harness){
+  if(harness==="codex")return `#!/usr/bin/env bash\n# proxyagent demo — calls a model through the proxy, no real key here.\nexport OPENAI_BASE_URL="${base}/openai/v1"\nexport OPENAI_API_KEY="${tok}"   # the pa_ token, not a real key\ncurl -s "$OPENAI_BASE_URL/chat/completions" \\\n  -H "Authorization: Bearer $OPENAI_API_KEY" \\\n  -d '{"model":"gpt-4o","max_tokens":60,"messages":[{"role":"user","content":"Say hi from proxyagent"}]}'`;
+  return `#!/usr/bin/env bash\n# proxyagent demo — calls a model through the proxy, no real key here.\nexport ANTHROPIC_BASE_URL="${base}/anthropic"\nexport ANTHROPIC_API_KEY="${tok}"   # the pa_ token, not a real key\ncurl -s "$ANTHROPIC_BASE_URL/v1/messages" \\\n  -H "x-api-key: $ANTHROPIC_API_KEY" \\\n  -d '{"model":"claude-3-5-haiku","max_tokens":60,"messages":[{"role":"user","content":"Say hi from proxyagent"}]}'`;
+}
 async function genRunToken(){
   const scope=(val("run_scope")||HRUN[runHarness].scope).split(",").map(s=>s.trim());
   const body={label:runHarness+"-agent",scope,budget_usd:parseFloat(val("run_budget"))||null};
@@ -317,11 +323,13 @@ async function genRunToken(){
   const base=location.origin,tok=d.token,h=HRUN[runHarness];
   const py=`import proxyagent\nproxyagent.run("build a todo app and run the tests",\n               harness="${runHarness}", token="${tok}",\n               proxy="${base}")`;
   const cli=`PROXYAGENT_TOKEN=${tok} \\\n  proxyagent run ${runHarness} --goal "ship it" --proxy ${base}`;
+  const demo=demoScript(base,tok,runHarness);
   const esc=s=>s.replace(/</g,"&lt;");
   document.getElementById("run_out").innerHTML=
     `<div class="label">Install ${h.label}</div><pre class="codeblock"><code>${h.install}</code>${cb(0,h.install)}</pre>`+
     `<div class="label">Run it — Python SDK <span class="muted" style="text-transform:none;letter-spacing:0">(token shown once)</span></div><pre class="codeblock"><code>${esc(py)}</code>${cb(0,py)}</pre>`+
     `<div class="label">…or the CLI</div><pre class="codeblock"><code>${esc(cli)}</code>${cb(0,cli)}</pre>`+
+    `<div class="label">Demo — paste &amp; run (proves it works, no key on the machine)</div><pre class="codeblock"><code>${esc(demo)}</code>${cb(0,demo)}</pre>`+
     `<p class="muted" style="font-size:12px">This token only allows <code>${scope.join(", ")}</code>${body.budget_usd?` · capped at $${body.budget_usd}`:""}. Revoke it anytime under Machine tokens.</p>`;
   toast("Token generated — copy a command above");
 }
@@ -450,8 +458,9 @@ async function mintToken(){const body={label:val("tk_label")||"machine",scope:(v
   const base=location.origin;
   const curl=`curl ${base}/anthropic/v1/messages \\\n  -H "x-api-key: ${d.token}" \\\n  -d '{"model":"mock","max_tokens":50,"messages":[{"role":"user","content":"hi"}]}'`;
   const env=`ANTHROPIC_BASE_URL=${base}/anthropic\nANTHROPIC_API_KEY=${d.token}\nOPENAI_BASE_URL=${base}/openai\nOPENAI_API_KEY=${d.token}`;
+  const demo=demoScript(base,d.token,(body.scope||[]).some(s=>String(s).startsWith("openai"))?"codex":"claude-code");
   const el=document.getElementById("tk_out");el.classList.remove("hide");
-  el.innerHTML=`<b>Token (shown once):</b> <button class="ghost sm" onclick="navigator.clipboard.writeText('${d.token}');this.textContent='copied'">copy</button><br/><span class="mono">${d.token}</span><div style="margin-top:12px"><b>Sample request</b> <button class="ghost sm" onclick='navigator.clipboard.writeText(${JSON.stringify(curl)});this.textContent="copied"'>copy curl</button> <button class="ghost sm" onclick='navigator.clipboard.writeText(${JSON.stringify(env)});this.textContent="copied"'>copy .env</button><pre class="mono" style="margin:6px 0 0;padding:10px;background:rgba(127,127,127,.08);border-radius:8px;overflow:auto;font-size:12px;white-space:pre-wrap">${curl.replace(/</g,"&lt;")}</pre></div>`;refreshTokens()}
+  el.innerHTML=`<b>Token (shown once):</b> <button class="ghost sm" onclick="navigator.clipboard.writeText('${d.token}');this.textContent='copied'">copy</button><br/><span class="mono">${d.token}</span><div style="margin-top:12px"><b>Demo — paste &amp; run</b> <button class="ghost sm" onclick='navigator.clipboard.writeText(${JSON.stringify(demo)});this.textContent="copied"'>copy demo.sh</button> <button class="ghost sm" onclick='navigator.clipboard.writeText(${JSON.stringify(curl)});this.textContent="copied"'>copy curl</button> <button class="ghost sm" onclick='navigator.clipboard.writeText(${JSON.stringify(env)});this.textContent="copied"'>copy .env</button><pre class="mono" style="margin:6px 0 0;padding:10px;background:rgba(127,127,127,.08);border-radius:8px;overflow:auto;font-size:12px;white-space:pre-wrap">${demo.replace(/</g,"&lt;")}</pre></div>`;refreshTokens()}
 async function revokeTok(id){await api("/admin/tokens/"+id,{method:"DELETE"});refreshTokens()}
 async function revokeExpired(){const d=await(await api("/admin/tokens/revoke-expired",{method:"POST"})).json();toast(`Revoked ${d.revoked} expired token(s)`);refreshTokens()}
 async function cloneTok(id){const d=await(await api("/admin/tokens/"+id+"/clone",{method:"POST"})).json();
