@@ -204,6 +204,19 @@ def test_ui_target_demo_and_copy_escaping():
     assert '.replace(/\'/g,"&#39;")' in html
 
 
+def test_ui_syntax_highlighter_and_token_table():
+    """The dashboard ships a self-contained syntax highlighter (Python + bash) wired into a
+    codeBlock() helper, and the machine-tokens table keeps its row actions on one line."""
+    from pathlib import Path
+    import proxyagent
+    html = (Path(proxyagent.__file__).parent / "ui" / "index.html").read_text()
+    assert "function hl(code,lang)" in html and "function codeBlock(" in html
+    assert "python:[" in html and "bash:[" in html         # both grammars present
+    assert "codeBlock(py,\"python\")" in html              # wired into the demos
+    assert ".actions{display:inline-flex" in html and "white-space:nowrap" in html
+    assert ".codeblock .st{" in html and ".codeblock .kw{" in html  # highlight palette
+
+
 def test_sdk_run_agent_keyless(monkeypatch):
     """proxyagent.run(prompt, token=…) launches the harness here with *_BASE_URL pointed at
     the proxy and the token as the key — and NO real key on the machine."""
