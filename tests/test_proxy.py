@@ -191,6 +191,19 @@ def test_ui_hide_class_wins():
     assert ".hide{display:none!important}" in html
 
 
+def test_ui_target_demo_and_copy_escaping():
+    """The Access keys page shows a Python target-machine demo (proxyagent.run), and the
+    copy helper escapes apostrophes — otherwise a snippet like 'proxy's URL' closes the
+    onclick attribute early and leaks the handler as visible text. Regression."""
+    from pathlib import Path
+    import proxyagent
+    html = (Path(proxyagent.__file__).parent / "ui" / "index.html").read_text()
+    assert 'id="targetdemo"' in html
+    assert "function pythonTarget(" in html and "proxyagent.run(" in html
+    # cb() must entity-escape ' (and ") so apostrophes in a snippet don't break the attr
+    assert '.replace(/\'/g,"&#39;")' in html
+
+
 def test_sdk_run_agent_keyless(monkeypatch):
     """proxyagent.run(prompt, token=…) launches the harness here with *_BASE_URL pointed at
     the proxy and the token as the key — and NO real key on the machine."""
