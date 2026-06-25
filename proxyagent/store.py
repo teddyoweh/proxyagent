@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS proxy_agent_calls (
     provider TEXT, model TEXT, status INTEGER,
     prompt_tokens INTEGER, completion_tokens INTEGER, latency_ms INTEGER,
     streamed INTEGER, tools_used TEXT, cost_usd DOUBLE PRECISION, error TEXT,
-    request_id TEXT
+    request_id TEXT, request_body TEXT, response_body TEXT
 );
 """
 
@@ -53,7 +53,9 @@ class Store:
                      "ALTER TABLE proxy_agent_tokens ADD COLUMN allowed_ips TEXT",
                      "ALTER TABLE proxy_agent_tokens ADD COLUMN note TEXT",
                      "ALTER TABLE proxy_agent_keys ADD COLUMN masked TEXT",
-                     "ALTER TABLE proxy_agent_calls ADD COLUMN request_id TEXT"):
+                     "ALTER TABLE proxy_agent_calls ADD COLUMN request_id TEXT",
+                     "ALTER TABLE proxy_agent_calls ADD COLUMN request_body TEXT",
+                     "ALTER TABLE proxy_agent_calls ADD COLUMN response_body TEXT"):
             try:
                 self.db.execute(stmt)
             except Exception:
@@ -238,13 +240,28 @@ class Store:
         kw.setdefault("ts_ms", now_ms())
         cols = ["id", "ts_ms", "token_id", "token_label", "provider", "model", "status",
                 "prompt_tokens", "completion_tokens", "latency_ms", "streamed",
-                "tools_used", "cost_usd", "error", "request_id"]
+                "tools_used", "cost_usd", "error", "request_id",
+                "request_body", "response_body"]
         self.db.execute(
             f"INSERT INTO proxy_agent_calls ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
             tuple(kw.get(c) for c in cols))
 
-    def list_logs(self, limit=200):
-        return self.db.fetchall("SELECT * FROM proxy_agent_calls ORDER BY ts_ms DESC LIMIT ?", (limit,))
+    # The feed/export never needs the (potentially large) captured bodies — keep them out
+    # of list queries and fetch them on demand via get_call().
+    _META = ("id, ts_ms, token_id, token_label, provider, model, status, prompt_tokens, "
+             "completion_tokens, latency_ms, streamed, tools_used, cost_usd, error, request_id")
+
+    def list_logs(self, limit=200, token_id=None):
+        if token_id:
+            return self.db.fetchall(
+                f"SELECT {self._META} FROM proxy_agent_calls WHERE token_id=? ORDER BY ts_ms DESC LIMIT ?",
+                (token_id, limit))
+        return self.db.fetchall(
+            f"SELECT {self._META} FROM proxy_agent_calls ORDER BY ts_ms DESC LIMIT ?", (limit,))
+
+    def get_call(self, call_id):
+        """A single call with its captured request/response bodies (for the inspector)."""
+        return self.db.fetchone("SELECT * FROM proxy_agent_calls WHERE id=?", (call_id,))
 
     def trim_logs(self, older_than_ms: int) -> int:
         cur = self.db.execute("DELETE FROM proxy_agent_calls WHERE ts_ms < ?", (older_than_ms,))

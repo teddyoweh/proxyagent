@@ -44,6 +44,49 @@ def _local_store():
     return Store(Config.load().db_path)
 
 
+def _admin_get(proxy: str, admin: Optional[str], path: str, local, params: Optional[dict] = None):
+    """Read-only admin data. For a localhost proxy, read the local store directly —
+    no admin token or running server needed, and it works whatever port the proxy is
+    on. Only a genuinely remote proxy goes over the admin HTTP API (and an unreachable
+    one gets a clean message, not a raw traceback)."""
+    from urllib.parse import urlparse
+    if urlparse(proxy).hostname in (None, "127.0.0.1", "localhost", "0.0.0.0"):
+        return local(_local_store())
+    try:
+        with _admin_client(proxy, admin) as c:
+            r = c.get(path, params=params or {})
+    except httpx.HTTPError as exc:
+        err.print(f"[red]Can't reach the proxy at {proxy}[/red] — is it running? ({type(exc).__name__})")
+        raise typer.Exit(1)
+    if r.status_code >= 400:
+        err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
+    return r.json()
+
+
+def _usage_rows(s):
+    from . import crypto
+    from .config import Config
+    cfg = Config.load()
+    provs = sorted(set(cfg.configured_providers()) | {c["provider"] for c in s.list_credentials() if c["active"]})
+    return {"usage": dict(s.usage_summary()), "providers": provs,
+            "backend": s.backend, "encryption": crypto.encryption_available()}
+
+
+def _usage_by_token_rows(s):
+    rows = []
+    for r in s.usage_by_token():
+        budget = r.get("budget_usd")
+        cost = round(float(r.get("cost_usd") or 0), 6)
+        rows.append({
+            "id": r["id"], "label": r["label"], "masked": r.get("masked"),
+            "revoked": bool(r["revoked"]), "requests": r["requests"],
+            "prompt_tokens": r["prompt_tokens"], "completion_tokens": r["completion_tokens"],
+            "cost_usd": cost, "budget_usd": budget,
+            "budget_pct": round(cost / budget * 100, 1) if budget else None,
+        })
+    return {"tokens": rows}
+
+
 @app.command()
 def serve(host: str = "127.0.0.1", port: int = 8080):
     """Run the proxy server + dashboard."""
@@ -337,11 +380,9 @@ def token_revoke(token_id: str, proxy: str = typer.Option("http://127.0.0.1:8080
 def logs(limit: int = 50, proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
          admin: Optional[str] = typer.Option(None, "--admin")):
     """Recent proxied requests (audit log)."""
-    with _admin_client(proxy, admin) as c:
-        r = c.get("/admin/logs", params={"limit": limit})
-    if r.status_code >= 400:
-        err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
-    rows = r.json()["logs"]
+    data = _admin_get(proxy, admin, "/admin/logs",
+                      lambda s: {"logs": [dict(g) for g in s.list_logs(limit)]}, {"limit": limit})
+    rows = data["logs"]
     t = Table(title="Requests")
     for col in ("Token", "Provider", "Model", "Status", "In", "Out", "Cost", "ms"):
         t.add_column(col)
@@ -358,11 +399,7 @@ def logs(limit: int = 50, proxy: str = typer.Option("http://127.0.0.1:8080", "--
 def usage(proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
           admin: str = typer.Option(None, "--admin")):
     """Totals: requests, tokens, and cost across all proxied calls."""
-    with _admin_client(proxy, admin) as c:
-        r = c.get("/admin/usage")
-    if r.status_code >= 400:
-        err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
-    d = r.json()
+    d = _admin_get(proxy, admin, "/admin/usage", _usage_rows)
     u = d["usage"]
     console.print(Panel.fit(
         f"[bold]{u['requests']}[/bold] requests   "
@@ -458,11 +495,8 @@ def stats(proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
 def usage_by_token(proxy: str = typer.Option("http://127.0.0.1:8080", "--proxy"),
                    admin: str = typer.Option(None, "--admin")):
     """Per-token spend breakdown — which machine token is costing what."""
-    with _admin_client(proxy, admin) as c:
-        r = c.get("/admin/usage-by-token")
-    if r.status_code >= 400:
-        err.print(f"[red]✗[/red] {r.text}"); raise typer.Exit(1)
-    rows = [t for t in r.json()["tokens"] if t["requests"]]
+    data = _admin_get(proxy, admin, "/admin/usage-by-token", _usage_by_token_rows)
+    rows = [t for t in data["tokens"] if t["requests"]]
     if not rows:
         console.print("[dim]No spend yet.[/dim]"); return
     t = Table(title="Spend by token")

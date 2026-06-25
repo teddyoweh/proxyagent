@@ -6,7 +6,10 @@ before they reach `proxy_agent_calls.error`. Always on; cheap; defensive.
 
 from __future__ import annotations
 
+import json
 import re
+
+CAPTURE_LIMIT = 16_384  # max chars stored per captured request/response body
 
 _PATTERNS = [
     (re.compile(r"sk-[A-Za-z0-9_\-]{12,}"), "sk-***"),                 # OpenAI / Anthropic api keys
@@ -27,4 +30,20 @@ def redact(text: str | None) -> str | None:
         return text
     for pat, repl in _PATTERNS:
         text = pat.sub(repl, text)
+    return text
+
+
+def capture(obj, limit: int = CAPTURE_LIMIT) -> str | None:
+    """Serialize a request/response body for the audit log: JSON-encode, redact
+    secret-shaped strings, and size-cap. Used for the prompt/output inspector when
+    body capture is enabled. Returns None for empty input."""
+    if obj is None:
+        return None
+    try:
+        text = obj if isinstance(obj, str) else json.dumps(obj, ensure_ascii=False, default=str)
+    except Exception:
+        text = str(obj)
+    text = redact(text) or ""
+    if len(text) > limit:
+        text = text[:limit] + f"…[truncated {len(text) - limit} chars]"
     return text

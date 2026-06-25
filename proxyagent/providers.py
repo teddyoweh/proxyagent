@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import fnmatch
 import json
+import os
 import time
 
 import httpx
@@ -26,6 +27,12 @@ FAILOVER_STATUS = {429, 500, 502, 503, 504, 529}
 # proxy must add the beta header (and, for pings, the system prompt too).
 ANTHROPIC_OAUTH_BETA = "oauth-2025-04-20"
 CLAUDE_CODE_SYSTEM = "You are Claude Code, Anthropic's official CLI for Claude."
+
+
+def capture_enabled() -> bool:
+    """Whether to persist prompt/response bodies for the inspector. On by default;
+    set PROXYAGENT_CAPTURE_BODIES=0 (or false/no/off) to store only metadata."""
+    return os.environ.get("PROXYAGENT_CAPTURE_BODIES", "1").strip().lower() not in ("0", "false", "no", "off")
 
 
 def _ensure_cc_system(body: dict) -> dict:
@@ -164,6 +171,8 @@ async def forward(
     model = body.get("model", "")
     t0 = now_ms()
     px = passthrough_headers or {}
+    cap = capture_enabled()
+    req_body = redact.capture(body) if cap else None
 
     # Offline mock — exercise the full pipeline (auth, scope, log, cost) with NO real
     # key. Use model "mock" (or "mock-…") anywhere a real model would go.
@@ -174,7 +183,8 @@ async def forward(
             model=model, status=200, prompt_tokens=ptok, completion_tokens=ctok,
             latency_ms=now_ms() - t0, streamed=1 if streaming else 0,
             tools_used=json.dumps(tools_used or []), cost_usd=pricing.cost_usd(model, ptok, ctok),
-            error=None, request_id=request_id)
+            error=None, request_id=request_id,
+            request_body=req_body, response_body=redact.capture(payload) if cap else None)
         if streaming:
             return 200, {"content-type": "text/event-stream"}, _mock_stream(provider.shape, payload), None
         return 200, {"content-type": "application/json"}, payload, None
@@ -184,19 +194,22 @@ async def forward(
         return 502, {}, {"error": f"provider '{provider_name}' not configured on the proxy "
                                   f"(set {provider.key_env} or `proxyagent provider add {provider_name}`)"}, None
 
-    def _log(status, ptok, ctok, err=None):
+    def _log(status, ptok, ctok, err=None, resp_body=None):
         store.log_request(
             token_id=token["id"], token_label=token.get("label"), provider=provider_name,
             model=model, status=status, prompt_tokens=ptok, completion_tokens=ctok,
             latency_ms=now_ms() - t0, streamed=1 if streaming else 0,
             tools_used=json.dumps(tools_used or []), cost_usd=pricing.cost_usd(model, ptok, ctok),
             error=err, request_id=request_id,
+            request_body=req_body, response_body=resp_body if cap else None,
         )
 
     if streaming:
         async def _gen():
             ptok = ctok = None
             status = 200
+            sse = []          # accumulated SSE text (capped) for the inspector
+            sse_len = 0
             try:
                 async with httpx.AsyncClient(timeout=config.request_timeout) as client:
                     for i, (url, headers, raw) in enumerate(plans):
@@ -207,6 +220,9 @@ async def forward(
                                 continue
                             async for chunk in resp.aiter_raw():
                                 text = chunk.decode("utf-8", "ignore")
+                                if cap and sse_len < redact.CAPTURE_LIMIT:
+                                    sse.append(text)
+                                    sse_len += len(text)
                                 if '"output_tokens"' in text or '"completion_tokens"' in text:
                                     try:
                                         for line in text.splitlines():
@@ -220,7 +236,8 @@ async def forward(
                                 yield chunk
                             break
             finally:
-                _log(status, ptok, ctok)
+                _log(status, ptok, ctok,
+                     resp_body=redact.capture("".join(sse)) if cap and sse else None)
         return 200, {"content-type": "text/event-stream"}, _gen(), None
 
     # Non-streaming, with credential failover across the pool.
@@ -255,7 +272,8 @@ async def forward(
                 payload = {"error": resp.text}
             ptok, ctok = _extract_usage(provider.shape, payload if isinstance(payload, dict) else {})
             _log(resp.status_code, ptok, ctok,
-                 None if resp.is_success else redact.redact(str(payload)[:300]))
+                 None if resp.is_success else redact.redact(str(payload)[:300]),
+                 resp_body=redact.capture(payload) if cap else None)
             return resp.status_code, {"content-type": "application/json"}, payload, None
     _log(last_status, None, None, "all credentials failed")
     return last_status, {"content-type": "application/json"}, last_payload, None

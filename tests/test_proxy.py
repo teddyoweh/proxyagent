@@ -1178,3 +1178,55 @@ def test_usage_by_token_breakdown():
     assert rows["beta"]["budget_usd"] == 5.0 and rows["beta"]["budget_pct"] is not None
     assert rows["alpha"]["budget_pct"] is None
     assert c.get("/admin/usage-by-token").status_code == 401
+
+
+def test_capture_bodies_and_call_detail():
+    """Prompts + outputs are captured (default on), surfaced via /admin/logs/{id},
+    kept out of the list feed, and filterable per-machine."""
+    c = _client()
+    r = c.post("/admin/tokens", headers=ADMIN, json={"label": "laptop", "scope": ["*"]}).json()
+    tok, tid = r["token"], r["id"]
+    body = {"model": "mock", "max_tokens": 20, "system": "You are a helpful assistant.",
+            "messages": [{"role": "user", "content": "What is the capital of France?"}]}
+    assert c.post("/anthropic/v1/messages", headers={"authorization": f"Bearer {tok}"}, json=body).status_code == 200
+
+    # list feed stays body-free (cheap), per-machine filter works
+    logs = c.get("/admin/logs?limit=5", headers=ADMIN).json()["logs"]
+    assert logs and "request_body" not in logs[0] and "response_body" not in logs[0]
+    cid = logs[0]["id"]
+    assert len(c.get(f"/admin/logs?token_id={tid}", headers=ADMIN).json()["logs"]) == 1
+    assert len(c.get(f"/admin/tokens/{tid}/calls", headers=ADMIN).json()["logs"]) == 1
+
+    # detail carries the captured prompt + output
+    d = c.get(f"/admin/logs/{cid}", headers=ADMIN).json()
+    assert d["capture_enabled"] is True
+    assert "capital of France" in d["request_body"]
+    assert "proxyagent mock" in d["response_body"]
+    assert c.get(f"/admin/logs/{cid}").status_code == 401
+    assert c.get("/admin/logs/call_missing", headers=ADMIN).status_code == 404
+    assert c.get("/admin/stats", headers=ADMIN).json()["capture"] is True
+
+
+def test_capture_disabled(monkeypatch):
+    """With PROXYAGENT_CAPTURE_BODIES=0 only metadata is stored — no bodies."""
+    monkeypatch.setenv("PROXYAGENT_CAPTURE_BODIES", "0")
+    c = _client()
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    body = {"model": "mock", "max_tokens": 5, "messages": [{"role": "user", "content": "hi"}]}
+    c.post("/anthropic/v1/messages", headers={"x-api-key": tok}, json=body)
+    cid = c.get("/admin/logs?limit=1", headers=ADMIN).json()["logs"][0]["id"]
+    d = c.get(f"/admin/logs/{cid}", headers=ADMIN).json()
+    assert d["capture_enabled"] is False
+    assert not d["request_body"] and not d["response_body"]
+
+
+def test_capture_redacts_secrets():
+    """Secret-shaped strings in a prompt are redacted before being stored."""
+    c = _client()
+    tok = c.post("/admin/tokens", headers=ADMIN, json={"scope": ["*"]}).json()["token"]
+    leak = "my key is sk-ABCDEFGHIJKLMNOPQRSTUVWX please use it"
+    body = {"model": "mock", "max_tokens": 5, "messages": [{"role": "user", "content": leak}]}
+    c.post("/anthropic/v1/messages", headers={"x-api-key": tok}, json=body)
+    cid = c.get("/admin/logs?limit=1", headers=ADMIN).json()["logs"][0]["id"]
+    rb = c.get(f"/admin/logs/{cid}", headers=ADMIN).json()["request_body"]
+    assert "sk-ABCDEFGHIJKLMNOPQRSTUVWX" not in rb and "sk-***" in rb

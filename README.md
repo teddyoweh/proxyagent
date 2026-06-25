@@ -82,9 +82,23 @@ copy-paste snippets pre-filled with your host). Reveal the admin token with
 - **Machine tokens** — mint (scoped / TTL / budget / note / IP allow-list), **search** (by
   label/id/scope), **edit** (retune in place, no re-mint), **clone** (duplicate config, new
   secret), revoke, and **revoke-expired** (one-click cleanup). Minting shows a sample curl + copy-`.env`.
+  **Click any machine** to open its **drill-down page** — that machine's requests, spend, budget,
+  and an inspectable log of every prompt it sent and the model's output.
 - **Model routing** — add/remove model remaps (e.g. `* → mock` for offline).
 - **Activity** — **spend-by-token** breakdown (requests · tokens · cost · budget %), a live
-  request log with usage + cost, plus **Export CSV** and **Trim** of the audit trail.
+  request log with usage + cost, plus **Export CSV** and **Trim** of the audit trail. **Click a
+  request** to inspect the exact prompt (system + messages) and the output it returned.
+
+### Prompt & output capture
+The proxy records each call's request/response bodies so the dashboard can show what actually
+went through — the per-machine page and the Activity feed both expand to a side-by-side
+**Prompt → Output** inspector. Bodies are **redacted** (secret-shaped strings → `sk-***`) and
+**size-capped** (~16 KB each) before they're stored. On by default; turn it off to keep only
+metadata (tokens/cost/status):
+
+```bash
+export PROXYAGENT_CAPTURE_BODIES=0     # store metadata only — never persist prompts/outputs
+```
 
 ## Proxied tools — the same trick, for tools
 The proxy can also hold your **tool** keys and hand agents governed tools — so an agent gets

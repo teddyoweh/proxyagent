@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from . import aliases, cache, crypto
 from .config import (AUTH_LABELS, AUTH_READY, CATALOG, HARNESSES, Config, PROVIDERS,
                      provider_budget, provider_rate_limit)
-from .providers import forward, forward_agentic, scope_allows, test_credential
+from .providers import capture_enabled, forward, forward_agentic, scope_allows, test_credential
 from .security import token_matches
 from .store import Store, now_ms
 from .tools import ToolRegistry
@@ -211,7 +211,11 @@ def create_app(config: Config | None = None) -> FastAPI:
             if cl and cl.isdigit() and int(cl) > maxb:
                 raise HTTPException(413, f"request body too large (> {maxb} bytes)")
         # Distributed-tracing passthrough — forward W3C trace context to the upstream.
-        px = {h: request.headers[h] for h in ("traceparent", "tracestate", "baggage")
+        # anthropic-beta is forwarded too: it carries the client's beta opt-ins (e.g.
+        # context-management, which Claude Code sends as a `context_management` body
+        # field). Dropping it makes Anthropic reject the field as an extra input (400).
+        px = {h: request.headers[h]
+              for h in ("traceparent", "tracestate", "baggage", "anthropic-beta")
               if h in request.headers}
         body = await request.json()
         # model remap — may rename the model and/or reroute to another provider
@@ -426,10 +430,19 @@ def create_app(config: Config | None = None) -> FastAPI:
                 "rate_limit": t["rate_limit"], "budget_usd": t.get("budget_usd")}
 
     @app.get("/admin/logs")
-    async def logs_ep(limit: int = 200, authorization: str | None = Header(None),
+    async def logs_ep(limit: int = 200, token_id: str | None = None,
+                      authorization: str | None = Header(None),
                       x_admin_token: str | None = Header(None)):
         require_admin(authorization, x_admin_token)
-        return {"logs": store.list_logs(limit)}
+        return {"logs": store.list_logs(limit, token_id=token_id)}
+
+    @app.get("/admin/tokens/{tid}/calls")
+    async def token_calls_ep(tid: str, limit: int = 100,
+                             authorization: str | None = Header(None),
+                             x_admin_token: str | None = Header(None)):
+        """Recent calls for one machine token — powers the per-machine drill-down page."""
+        require_admin(authorization, x_admin_token)
+        return {"logs": store.list_logs(limit, token_id=tid)}
 
     @app.post("/admin/logs/trim")
     async def trim_logs_ep(days: int = 30, authorization: str | None = Header(None),
@@ -459,6 +472,20 @@ def create_app(config: Config | None = None) -> FastAPI:
         return PlainTextResponse(buf.getvalue(), media_type="text/csv",
                                  headers={"content-disposition": "attachment; filename=proxyagent-audit.csv"})
 
+    # Declared AFTER /admin/logs/export and /admin/logs/trim so the literal paths win —
+    # Starlette matches routes in declaration order, and {call_id} would otherwise swallow them.
+    @app.get("/admin/logs/{call_id}")
+    async def call_detail_ep(call_id: str, authorization: str | None = Header(None),
+                             x_admin_token: str | None = Header(None)):
+        """A single proxied call with its captured prompt + output bodies — the inspector.
+        Bodies are present only if capture was on (PROXYAGENT_CAPTURE_BODIES) at request time."""
+        require_admin(authorization, x_admin_token)
+        call = store.get_call(call_id)
+        if not call:
+            raise HTTPException(404, "call not found")
+        call["capture_enabled"] = capture_enabled()
+        return call
+
     def _configured() -> list[str]:
         env = set(config.configured_providers())
         db = {c["provider"] for c in store.list_credentials() if c["active"]}
@@ -484,6 +511,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         return {
             "version": __version__, "uptime_s": round(time.time() - started_at),
             "backend": store.backend, "encryption": crypto.encryption_available(),
+            "capture": capture_enabled(),
             "cache": {"enabled": cache.enabled(), "ttl_s": cs["ttl"], "hits": cs["hits"], "size": cs["size"]},
             "latency_ms": store.latency_percentiles(),
             "by_status": {str(r["status"]): r["n"] for r in m["by_status"]},
